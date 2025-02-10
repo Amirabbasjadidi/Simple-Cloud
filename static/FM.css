@@ -1,0 +1,168 @@
+@font-face {
+    font-family: 'Ubuntu';
+    src: url('Ubuntu.ttf') format('truetype');
+}
+
+body {
+    font-family: 'Ubuntu', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    padding-top: 60px;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+}
+
+.file-manager-container {
+    padding: 20px;
+    margin-top: 60px;
+    width: 90%;
+    max-width: 1200px;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+}
+
+.files-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    justify-content: center;
+}
+
+.file-item {
+    background: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    text-align: center;
+    padding: 15px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: space-between;
+    height: 275px;
+}
+
+.thumbnail {
+    width: 100%;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 5px;
+}
+
+.file-icon {
+    font-size: 48px;
+    margin: 10px 0;
+}
+
+.file-name {
+    font-size: 14px;
+    color: #555;
+    margin: 5px 0;
+    text-overflow: ellipsis;
+    overflow: hidden;
+    white-space: nowrap;
+    width: 100%;
+}
+
+.download-button, .delete-button {
+    padding: 8px 10px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 14px;
+    margin: 5px 2px;
+    display: inline-block;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.download-button {
+    background: #4CAF50;
+    color: white;
+}
+
+.download-button:hover {
+    background: #45a049;
+}
+
+.delete-button {
+    background: #ff4b5c;
+    color: white;
+    border: none;
+}
+
+.delete-button:hover {
+    background: #e04350;
+}
+
+.pagination {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 20px;
+    gap: 10px;
+}
+
+.pagination button {
+    padding: 8px 12px;
+    font-size: 14px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+
+.pagination button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+.pagination button:hover:not(:disabled) {
+    background: #45a049;
+}
+
+button {
+    font-family: 'Ubuntu', sans-serif;
+}
+
+
+#page-info {
+    font-size: 16px;
+    color: #333;
+}
+.View-button {
+    padding: 8px 10px;
+    border-radius: 5px;
+    text-decoration: none;
+    font-size: 14px;
+    margin: 5px 2px;
+    display: inline-block;
+    cursor: pointer;
+    transition: background 0.3s;
+    background: #2575fc;
+    color: white;
+    border: none;
+}
+
+.View-button:hover:not(:disabled) {
+    background: #1a5bbf;
+}
+
+.View-button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .file-manager-container {
+        margin: 0 5px;
+    }
+    .files-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
