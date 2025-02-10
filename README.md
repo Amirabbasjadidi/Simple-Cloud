@@ -10,6 +10,7 @@ This is a Flask-based Cloud with authentication, user management, and file handl
 - API for retrieving and deleting user files
 - Responsive and user-friendly design
 - Default user `root` with password `1234` (must be changed after setup)
+- Private file access: Each user can only view, download, and manage their own uploaded or fetched files.
 
 ## License
 This project is licensed under the GNU General Public License v3.0 (GPLv3). See the [`License`](https://github.com/Amirabbasjadidi/Simple-Cloud/blob/main/LICENSE) file for details.
