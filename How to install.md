@@ -40,7 +40,7 @@ pip install -r requirements.txt
 
 ```
 source venv/bin/activate
-python app.py
+sudo python app.py
 ```
 
 ## 5. Setup Flask as a Systemd Service
