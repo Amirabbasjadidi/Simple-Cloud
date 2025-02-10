@@ -6,7 +6,7 @@
 ```bash
 wget https://raw.githubusercontent.com/Amirabbasjadidi/Simple-Cloud/main/install.sh
 chmod +x install.sh
-./install.sh
+sudo ./install.sh
 ```
 
 This script will automatically set up everything for you, including dependencies, virtual environment, and the systemd service.
