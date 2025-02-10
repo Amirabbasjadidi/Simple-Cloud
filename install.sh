@@ -19,15 +19,26 @@ sudo apt install python3 python3-pip python3-venv -y
 
 # Clone the project and set up virtual environment
 echo "Cloning the project and setting up virtual environment..."
-cd "$PROJECT_PATH"
+cd "$PROJECT_PATH" || exit 1
 git clone https://github.com/Amirabbasjadidi/Simple-Cloud.git
-cd Simple-Cloud
+cd Simple-Cloud || exit 1
 python3 -m venv venv
 source venv/bin/activate
 
 # Install required packages
 echo "Installing required packages..."
 pip install -r requirements.txt
+
+# Generate a persistent SECRET_KEY
+SECRET_KEY_FILE="/etc/simplecloud.env"
+if [ ! -f "$SECRET_KEY_FILE" ]; then
+    echo "Generating a new SECRET_KEY..."
+    SECRET_KEY=$(openssl rand -hex 32)
+    echo "SECRET_KEY=$SECRET_KEY" | sudo tee "$SECRET_KEY_FILE"
+    sudo chmod 600 "$SECRET_KEY_FILE"  # Secure the file
+else
+    echo "SECRET_KEY already exists. Skipping generation."
+fi
 
 # Create Systemd service
 echo "Creating systemd service..."
@@ -39,6 +50,7 @@ After=network.target
 [Service]
 User=$USERNAME
 WorkingDirectory=$PROJECT_PATH/Simple-Cloud
+EnvironmentFile=/etc/simplecloud.env
 Environment=\"PATH=$PROJECT_PATH/Simple-Cloud/venv/bin:$PATH\"
 ExecStart=$PROJECT_PATH/Simple-Cloud/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app
 Restart=always
