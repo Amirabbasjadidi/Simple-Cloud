@@ -36,14 +36,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 4. Run Flask Application Temporarily
-
-```
-source venv/bin/activate
-sudo python app.py
-```
-
-## 5. Setup Flask as a Systemd Service
+## 4. Setup Flask as a Systemd Service
 
 ### Create the Service File
 
@@ -71,7 +64,7 @@ WantedBy=multi-user.target
 
 **Note:** Only edit `User`, `WorkingDirectory`, `Environment (PATH)`, and ensure the correct `ExecStart` path. Do not modify other sections unless necessary.
 
-## 6. Allow Python to Bind to Port 80
+## 5. Allow Python to Bind to Port 80
 
 ### Find the Real Python Path
 
@@ -93,7 +86,7 @@ sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.12
 
 **Note:** Running Flask directly on port 80 is suitable for local network applications. However, for larger deployments, it is recommended to use Nginx or a similar reverse proxy for better security and performance.
 
-## 7. Enable and Start the Service
+## 6. Enable and Start the Service
 
 ```
 sudo systemctl daemon-reload
@@ -101,17 +94,25 @@ sudo systemctl enable simplecloud
 sudo systemctl start simplecloud
 ```
 
-## 8. Check Service Status
+## 7. Check Service Status
 
 ```
 sudo systemctl status simplecloud
 ```
 
-### Access the Flask Application
+### Debugging in Case of Issues
+If the service fails to start, use the following command to check logs:
+```
+sudo journalctl -u simplecloud --no-pager | tail -n 20
+```
+
+## 8. Access the Flask Application
 
 ```
-http://your_server_ip
+curl -I http://your_server_ip
 ```
+
+If you see a `200 OK` response, your service is running correctly.
 
 ## ⭐ Support the Project
 
