@@ -15,7 +15,7 @@ This is a Flask-based Cloud with authentication, user management, and file handl
 This project is licensed under the GNU General Public License v3.0 (GPLv3). See the [`License`](https://github.com/Amirabbasjadidi/Simple-Cloud/blob/main/LICENSE) file for details.
 
 ## Installation
-For installation instructions, refer to the [`How to install.md`](./How%20to%20install.md) file.
+For installation on Debian-based servers, refer to the [`How to install.md`](./How%20to%20install.md) file.
 
 ## User Management
 For managing users through the command-line interface (CLI), refer to the [`User management cli.md`](./User%20management%20cli.md) file.
