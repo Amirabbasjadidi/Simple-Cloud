@@ -5,6 +5,7 @@ from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import requests
 import secrets
+from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 
 app.secret_key = secrets.token_hex(32)
@@ -30,6 +31,8 @@ def get_db_connection():
     return conn
 
 def init_db():
+    hashed_password = generate_password_hash('1234')
+
     with get_db_connection() as conn:
         conn.execute(''' 
             CREATE TABLE IF NOT EXISTS users (
@@ -47,7 +50,7 @@ def init_db():
             )
         ''')
         conn.execute('INSERT OR IGNORE INTO users (username, password) VALUES (?, ?)',
-                     ('root', '1234'))
+                     ('root', hashed_password))
         conn.commit()
 
 init_db()
@@ -66,6 +69,7 @@ def load_user(user_id):
             return User(user['id'], user['username'], user['password'])
     return None
 
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -76,15 +80,19 @@ def login():
         username = data.get('username')
         password = data.get('password')
         remember_me = data.get('remember_me', False)
+
         with get_db_connection() as conn:
-            user = conn.execute('SELECT * FROM users WHERE username = ? AND password = ?',
-                                (username, password)).fetchone()
-            if user:
+            user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
+
+            if user and check_password_hash(user['password'], password):
                 user_obj = User(user['id'], user['username'], user['password'])
                 login_user(user_obj, remember=remember_me)
                 return jsonify(success=True, redirect_url=url_for('upload'))
+
             return jsonify(success=False, error="Invalid username or password.")
+
     return render_template('login.html')
+
 
 @app.route('/logout')
 @login_required
@@ -223,13 +231,15 @@ def media(filename):
     return send_from_directory(app.config['UPLOAD_FOLDER'], filename)
 
 def add_user_helper(username, password):
+    hashed_password = generate_password_hash(password)
     with get_db_connection() as conn:
         try:
-            conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password))
+            conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, hashed_password))
             conn.commit()
             print(f"User {username} added successfully.")
         except sqlite3.IntegrityError:
             print(f"User {username} already exists.")
+
 
 @app.cli.command('adduser')
 def add_user():
@@ -241,10 +251,11 @@ def add_user():
 def change_password():
     username = input("Enter username: ")
     new_password = input("Enter new password: ")
+    hashed_password = generate_password_hash(new_password)
     with get_db_connection() as conn:
         user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
         if user:
-            conn.execute('UPDATE users SET password = ? WHERE username = ?', (new_password, username))
+            conn.execute('UPDATE users SET password = ? WHERE username = ?', (hashed_password, username))
             conn.commit()
             print(f"Password for user {username} updated successfully.")
         else:
