@@ -9,7 +9,7 @@ This is a Flask-based Cloud with authentication, user management, and file handl
 - User management through CLI
 - API for retrieving and deleting user files
 - Responsive and user-friendly design
-- Default user `root` with password `1234` (must be changed after setup)
+- Default user `root` with password `1234` (recommended to change after setup)
 - Each user can only view, download, and manage their own uploaded or fetched files.
 
 ## License
