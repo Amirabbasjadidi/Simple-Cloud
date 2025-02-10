@@ -4,11 +4,10 @@ import sqlite3
 from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import requests
-import secrets
 from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 
-app.secret_key = secrets.token_hex(32)
+app.secret_key = os.getenv("SECRET_KEY", "default_secret_if_missing")
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

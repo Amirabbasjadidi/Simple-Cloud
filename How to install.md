@@ -36,11 +36,34 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## 4. Setup Flask as a Systemd Service
+
+## 4. Generate and Store SECRET_KEY
+
+### Generate a Random SECRET_KEY
+
+```bash
+openssl rand -hex 32
+```
+
+#### Example Output:
+```
+f23a5d6c8e9b1a7f32c4d8e90b56a3df0c2e1f78b45e6c9d1a23b4c8d0e5f1a2
+```
+
+### Save `SECRET_KEY` in a Secure File
+
+```bash
+echo "SECRET_KEY=f23a5d6c8e9b1a7f32c4d8e90b56a3df0c2e1f78b45e6c9d1a23b4c8d0e5f1a2" | sudo tee /etc/simplecloud.env
+sudo chmod 600 /etc/simplecloud.env  # Secure the file
+```
+
+---
+
+## 5. Setup Flask as a Systemd Service
 
 ### Create the Service File
 
-```
+```bash
 sudo nano /etc/systemd/system/simplecloud.service
 ```
 
@@ -54,8 +77,9 @@ After=network.target
 [Service]
 User=your_user  # Replace with your actual username
 WorkingDirectory=/path/to/your/project  # Replace with the actual project path
+EnvironmentFile=/etc/simplecloud.env
 Environment="PATH=/path/to/your/project/venv/bin"  # Replace with the actual Environment (PATH)
-ExecStart=/path/to/your/project/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app
+ExecStart=/path/to/your/project/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app # Replace with the actual project path
 Restart=always
 
 [Install]
@@ -64,7 +88,7 @@ WantedBy=multi-user.target
 
 **Note:** Only edit `User`, `WorkingDirectory`, `Environment (PATH)`, and ensure the correct `ExecStart` path. Do not modify other sections unless necessary.
 
-## 5. Allow Python to Bind to Port 80
+## 6. Allow Python to Bind to Port 80
 
 ### Find the Real Python Path
 
@@ -86,7 +110,7 @@ sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.12
 
 **Note:** Running Flask directly on port 80 is suitable for local network applications. However, for larger deployments, it is recommended to use Nginx or a similar reverse proxy for better security and performance.
 
-## 6. Enable and Start the Service
+## 7. Enable and Start the Service
 
 ```
 sudo systemctl daemon-reload
@@ -94,7 +118,7 @@ sudo systemctl enable simplecloud
 sudo systemctl start simplecloud
 ```
 
-## 7. Check Service Status
+## 8. Check Service Status
 
 ```
 sudo systemctl status simplecloud
@@ -106,7 +130,7 @@ If the service fails to start, use the following command to check logs:
 sudo journalctl -u simplecloud --no-pager | tail -n 20
 ```
 
-## 8. Access the Flask Application
+## 9. Access the Flask Application
 
 ```
 curl -I http://your_server_ip
