@@ -7,7 +7,17 @@ import requests
 from werkzeug.security import generate_password_hash, check_password_hash
 app = Flask(__name__)
 
-app.secret_key = os.getenv("SECRET_KEY", "default_secret_if_missing")
+def load_secret_key():
+    secret_file = "/etc/simplecloud.env"
+    if os.path.exists(secret_file):
+        with open(secret_file) as f:
+            for line in f:
+                if line.startswith("SECRET_KEY="):
+                    return line.strip().split("=", 1)[1]
+    return "default_secret_if_missing"
+SECRET_KEY = load_secret_key()
+
+app.config['SECRET_KEY'] = SECRET_KEY
 
 UPLOAD_FOLDER = 'uploads'
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)

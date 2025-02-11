@@ -77,7 +77,6 @@ After=network.target
 [Service]
 User=your_user  # Replace with your actual username
 WorkingDirectory=/path/to/your/project  # Replace with the actual project path
-EnvironmentFile=/etc/simplecloud.env
 Environment="PATH=/path/to/your/project/venv/bin"  # Replace with the actual Environment (PATH)
 ExecStart=/path/to/your/project/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app # Replace with the actual project path
 Restart=always
