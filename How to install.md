@@ -54,7 +54,7 @@ f23a5d6c8e9b1a7f32c4d8e90b56a3df0c2e1f78b45e6c9d1a23b4c8d0e5f1a2
 
 ```bash
 echo "SECRET_KEY=f23a5d6c8e9b1a7f32c4d8e90b56a3df0c2e1f78b45e6c9d1a23b4c8d0e5f1a2" | sudo tee /etc/simplecloud.env
-sudo chmod 600 /etc/simplecloud.env  # Secure the file
+sudo chmod 600 /etc/simplecloud.env
 ```
 
 ---
