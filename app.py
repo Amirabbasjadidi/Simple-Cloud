@@ -9,12 +9,15 @@ app = Flask(__name__)
 
 def load_secret_key():
     secret_file = "/etc/simplecloud.env"
-    if os.path.exists(secret_file):
+    try:
         with open(secret_file) as f:
             for line in f:
                 if line.startswith("SECRET_KEY="):
-                    return line.strip().split("=", 1)[1]
+                    return line.strip().split("=", 1)[1].strip()
+    except FileNotFoundError:
+        pass
     return "default_secret_if_missing"
+
 SECRET_KEY = load_secret_key()
 
 app.config['SECRET_KEY'] = SECRET_KEY
