@@ -84,5 +84,5 @@ flask listusers
 
 After running any of these commands, the database is optimized by running the `VACUUM;` command.
 
-For further details, use `flask helpme` to get descriptions of each command directly in the terminal.
+For further details, use `flask help` to get descriptions of each command directly in the terminal.
 
