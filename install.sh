@@ -50,7 +50,6 @@ After=network.target
 [Service]
 User=$USERNAME
 WorkingDirectory=$PROJECT_PATH/Simple-Cloud
-EnvironmentFile=/etc/simplecloud.env
 Environment=\"PATH=$PROJECT_PATH/Simple-Cloud/venv/bin:$PATH\"
 ExecStart=$PROJECT_PATH/Simple-Cloud/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app
 Restart=always
