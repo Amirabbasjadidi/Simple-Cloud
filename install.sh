@@ -57,11 +57,23 @@ Restart=always
 [Install]
 WantedBy=multi-user.target" | sudo tee $SERVICE_FILE
 
-# Grant permission to bind to port 80
 echo "Granting permission to bind to port 80..."
 PYTHON_PATH="$PROJECT_PATH/Simple-Cloud/venv/bin/python"
-if [ -f "$PYTHON_PATH" ]; then
-    sudo setcap 'cap_net_bind_service=+ep' "$PYTHON_PATH"
+
+# Check if PYTHON_PATH is a symlink
+if [ -L "$PYTHON_PATH" ]; then
+    REAL_PYTHON_PATH=$(readlink -f "$PYTHON_PATH")
+else
+    REAL_PYTHON_PATH="$PYTHON_PATH"
+fi
+
+if [ -f "$REAL_PYTHON_PATH" ]; then
+    if sudo setcap 'cap_net_bind_service=+ep' "$REAL_PYTHON_PATH"; then
+        echo "Successfully granted permission to bind to port 80."
+    else
+        echo "Failed to set capabilities. You may need to run Gunicorn with sudo."
+        echo "Try: sudo $REAL_PYTHON_PATH -m gunicorn -w 4 -b 0.0.0.0:80 app:app"
+    fi
 else
     echo "Error: Python not found in virtual environment!"
     exit 1
