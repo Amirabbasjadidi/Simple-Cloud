@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory
+from flask import Flask, render_template, request, jsonify, redirect, url_for, send_from_directory, session
 import os
 import sqlite3
 from werkzeug.utils import secure_filename
@@ -6,6 +6,11 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 import requests
 from werkzeug.security import generate_password_hash, check_password_hash
 from urllib.parse import urlparse
+from PIL import Image, ImageDraw, ImageFont
+from io import BytesIO
+import random
+import base64
+
 
 app = Flask(__name__)
 
@@ -84,6 +89,59 @@ def load_user(user_id):
     return None
 
 
+def generate_captcha():
+    num1, num2 = random.randint(1, 9), random.randint(1, 9)
+    captcha_text = f"{num1} + {num2}"
+    session['captcha_result'] = num1 + num2
+
+    font_path = os.path.join(app.root_path, 'static', 'Ubuntu.ttf')
+
+    img = Image.new('RGB', (200, 100), color=(255, 255, 255))
+    draw = ImageDraw.Draw(img)
+
+    try:
+        font = ImageFont.truetype(font_path, 50)
+    except Exception as e:
+        print(f"Error loading font: {e}")
+        font = ImageFont.load_default()
+
+    x, y = 50, 25
+    angle = random.randint(-15, 15)
+
+    text_img = Image.new('RGBA', (200, 100), (255, 255, 255, 0))
+    text_draw = ImageDraw.Draw(text_img)
+    text_draw.text((x, y), captcha_text, font=font, fill=(0, 0, 0, 255))
+    text_img = text_img.rotate(angle, resample=Image.BICUBIC, center=(100, 50))
+
+    img.paste(text_img, (0, 0), text_img)
+
+    for _ in range(8):
+        x1, y1, x2, y2 = [random.randint(0, 200) for _ in range(4)]
+        draw.line((x1, y1, x2, y2), fill=(random.randint(100, 150), random.randint(100, 150), random.randint(100, 150)), width=2)
+
+    for _ in range(200):
+        x, y = random.randint(0, 200), random.randint(0, 100)
+        draw.point((x, y), fill=(random.randint(150, 200), random.randint(150, 200), random.randint(150, 200)))
+
+    pixels = img.load()
+    for i in range(img.size[0]):
+        for j in range(img.size[1]):
+            if i + 2 < img.size[0] and j + 2 < img.size[1]:
+                dx = random.randint(-1, 1)
+                dy = random.randint(-1, 1)
+                pixels[i, j] = pixels[i + dx, j + dy]
+
+    buffer = BytesIO()
+    img.save(buffer, format="PNG")
+    img_data = base64.b64encode(buffer.getvalue()).decode('utf-8')
+    return img_data
+
+@app.route('/refresh_captcha')
+def refresh_captcha():
+    captcha = generate_captcha()
+    return jsonify({'captcha_image': captcha})
+
+
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if current_user.is_authenticated:
@@ -94,6 +152,10 @@ def login():
         username = data.get('username')
         password = data.get('password')
         remember_me = data.get('remember_me', False)
+        captcha_input = int(data.get('captcha'))
+
+        if captcha_input != session.get('captcha_result'):
+            return jsonify(success=False, error="Invalid Captcha.")
 
         with get_db_connection() as conn:
             user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
@@ -105,7 +167,8 @@ def login():
 
             return jsonify(success=False, error="Invalid username or password.")
 
-    return render_template('login.html')
+    captcha_image = generate_captcha()
+    return render_template('login.html', captcha_image=captcha_image)
 
 
 @app.route('/logout')

@@ -3,4 +3,4 @@ Flask-Login
 Werkzeug
 requests
 gunicorn
-werkzeug
+Pillow

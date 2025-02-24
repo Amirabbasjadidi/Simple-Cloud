@@ -13,6 +13,14 @@
         <form id="login-form" method="POST" action="/login">
             <input type="text" id="username" name="username" placeholder="Username" required>
             <input type="password" id="password" name="password" placeholder="Password" required>
+            <div class="captcha-container">
+                <div class="captcha-wrapper">
+                    <img id="captcha-image" src="data:image/png;base64,{{ captcha_image }}" alt="Captcha">
+                    <span class="tooltip">Click to refresh captcha</span>
+                </div>
+                <input type="text" id="captcha" name="captcha" placeholder="Enter Captcha" required>
+            </div>
+
 
             <div class="checkbox-container">
                 <label>
