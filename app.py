@@ -5,6 +5,8 @@ from werkzeug.utils import secure_filename
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import requests
 from werkzeug.security import generate_password_hash, check_password_hash
+from urllib.parse import urlparse
+
 app = Flask(__name__)
 
 def load_secret_key():
@@ -157,7 +159,7 @@ def download_file_from_url():
     try:
         response = requests.get(url, stream=True)
         if response.status_code == 200:
-            filename = secure_filename(url.split("/")[-1])
+            filename = secure_filename(urlparse(url).path.split("/")[-1])
             filename = get_unique_filename(app.config['UPLOAD_FOLDER'], filename)
 
             file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
