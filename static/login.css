@@ -90,3 +90,55 @@ button:hover {
         box-sizing: border-box;
     }
 }
+.captcha-container {
+    display: flex;
+    flex-direction: row-reverse;
+    align-items: center;
+    gap: 15px;
+    position: relative;
+}
+
+.captcha-wrapper {
+    position: relative;
+    display: inline-block;
+    cursor: pointer;
+}
+
+#captcha-image {
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    width: 150px;
+    height: 50px;
+    cursor: pointer;
+}
+
+.tooltip {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #333;
+    color: #fff;
+    padding: 5px 10px;
+    border-radius: 5px;
+    font-size: 12px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s ease-in-out;
+    white-space: nowrap;
+    z-index: 10;
+}
+
+.captcha-wrapper:hover .tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+#captcha {
+    padding: 12px;
+    width: 100%;
+    max-width: 250px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+}
