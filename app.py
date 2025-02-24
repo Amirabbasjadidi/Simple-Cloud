@@ -6,7 +6,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 import requests
 from werkzeug.security import generate_password_hash, check_password_hash
 from urllib.parse import urlparse
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFont, ImageFilter
 from io import BytesIO
 import random
 import base64
@@ -90,12 +90,27 @@ def load_user(user_id):
 
 
 def generate_captcha():
-    num1, num2 = random.randint(1, 9), random.randint(1, 9)
-    captcha_text = f"{num1} + {num2}"
-    session['captcha_result'] = num1 + num2
+
+    operator = random.choice(['+', '-', '*'])
+    if operator == '-':
+        num1 = random.randint(1, 20)
+        num2 = random.randint(1, num1)
+    elif operator == '*':
+        num1, num2 = random.randint(1, 5), random.randint(1, 5)
+
+    else:
+        num1, num2 = random.randint(1, 10), random.randint(1, 10)
+
+    if operator == '+':
+        session['captcha_result'] = num1 + num2
+    elif operator == '-':
+        session['captcha_result'] = num1 - num2
+    else:
+        session['captcha_result'] = num1 * num2
+
+    captcha_text = f"{num1} {operator} {num2}"
 
     font_path = os.path.join(app.root_path, 'static', 'Ubuntu.ttf')
-
     img = Image.new('RGB', (200, 100), color=(255, 255, 255))
     draw = ImageDraw.Draw(img)
 
@@ -105,31 +120,30 @@ def generate_captcha():
         print(f"Error loading font: {e}")
         font = ImageFont.load_default()
 
-    x, y = 50, 25
-    angle = random.randint(-15, 15)
+    bbox = draw.textbbox((0, 0), captcha_text, font=font)
+    x = (200 - (bbox[2] - bbox[0])) // 2
+    y = (100 - (bbox[3] - bbox[1])) // 2
+
+    angle = random.randint(-25, 25)
 
     text_img = Image.new('RGBA', (200, 100), (255, 255, 255, 0))
     text_draw = ImageDraw.Draw(text_img)
-    text_draw.text((x, y), captcha_text, font=font, fill=(0, 0, 0, 255))
+    text_draw.text((x, y), captcha_text, font=font,
+                   fill=(random.randint(0, 100), random.randint(0, 100), random.randint(0, 100)))
     text_img = text_img.rotate(angle, resample=Image.BICUBIC, center=(100, 50))
 
     img.paste(text_img, (0, 0), text_img)
 
-    for _ in range(8):
+    for _ in range(10):
         x1, y1, x2, y2 = [random.randint(0, 200) for _ in range(4)]
-        draw.line((x1, y1, x2, y2), fill=(random.randint(100, 150), random.randint(100, 150), random.randint(100, 150)), width=2)
+        draw.line((x1, y1, x2, y2), fill=(random.randint(50, 150), random.randint(50, 150), random.randint(50, 150)),
+                  width=3)
 
-    for _ in range(200):
+    for _ in range(300):
         x, y = random.randint(0, 200), random.randint(0, 100)
-        draw.point((x, y), fill=(random.randint(150, 200), random.randint(150, 200), random.randint(150, 200)))
+        draw.point((x, y), fill=(random.randint(150, 255), random.randint(150, 255), random.randint(150, 255)))
 
-    pixels = img.load()
-    for i in range(img.size[0]):
-        for j in range(img.size[1]):
-            if i + 2 < img.size[0] and j + 2 < img.size[1]:
-                dx = random.randint(-1, 1)
-                dy = random.randint(-1, 1)
-                pixels[i, j] = pixels[i + dx, j + dy]
+    img = img.filter(ImageFilter.GaussianBlur(1))
 
     buffer = BytesIO()
     img.save(buffer, format="PNG")
