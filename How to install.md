@@ -78,7 +78,7 @@ After=network.target
 User=your_user  # Replace with your actual username
 WorkingDirectory=/path/to/your/project  # Replace with the actual project path
 Environment="PATH=/path/to/your/project/venv/bin"  # Replace with the actual Environment (PATH)
-ExecStart=/path/to/your/project/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 app:app # Replace with the actual project path
+ExecStart=/path/to/your/project/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 --timeout 600 app:app # Replace with the actual project path
 Restart=always
 
 [Install]
