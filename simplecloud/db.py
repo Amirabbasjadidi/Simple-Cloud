@@ -4,6 +4,42 @@ import sqlite3
 from flask import current_app, g
 from werkzeug.security import check_password_hash, generate_password_hash
 
+# Bump together with a new step in migrate.MIGRATIONS. tests/test_migration.py checks that a
+# fresh database (SCHEMA below) and a migrated legacy database end up with the same tables.
+LATEST_VERSION = 2
+
+SCHEMA = [
+    """CREATE TABLE users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        must_change_password INTEGER NOT NULL DEFAULT 0
+    )""",
+    """CREATE TABLE files (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        name TEXT NOT NULL,
+        stored_name TEXT NOT NULL UNIQUE,
+        size INTEGER NOT NULL,
+        mime_type TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "CREATE INDEX idx_files_user ON files(user_id)",
+    """CREATE TABLE captchas (
+        token TEXT PRIMARY KEY,
+        answer INTEGER NOT NULL,
+        expires_at REAL NOT NULL
+    )""",
+    """CREATE TABLE login_failures (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ip TEXT NOT NULL,
+        username TEXT,
+        ts REAL NOT NULL
+    )""",
+    "CREATE INDEX idx_login_failures_ip ON login_failures(ip, ts)",
+    "CREATE INDEX idx_login_failures_user ON login_failures(username, ts)",
+]
+
 
 def connect(path):
     conn = sqlite3.connect(path, timeout=30)
@@ -24,64 +60,53 @@ def close_db(_exc=None):
         conn.close()
 
 
-SCHEMA = """
-CREATE TABLE IF NOT EXISTS users (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    username TEXT UNIQUE NOT NULL,
-    password TEXT NOT NULL,
-    must_change_password INTEGER NOT NULL DEFAULT 0
-);
-CREATE TABLE IF NOT EXISTS files (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL,
-    path TEXT NOT NULL,
-    uploaded_by TEXT NOT NULL
-);
-CREATE TABLE IF NOT EXISTS captchas (
-    token TEXT PRIMARY KEY,
-    answer INTEGER NOT NULL,
-    expires_at REAL NOT NULL
-);
-CREATE TABLE IF NOT EXISTS login_failures (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    ip TEXT NOT NULL,
-    username TEXT,
-    ts REAL NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_login_failures_ip ON login_failures(ip, ts);
-CREATE INDEX IF NOT EXISTS idx_login_failures_user ON login_failures(username, ts);
-"""
+def table_exists(conn, name):
+    return conn.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,)).fetchone() is not None
+
+
+def schema_version(conn):
+    return conn.execute("PRAGMA user_version").fetchone()[0]
 
 
 def init_db(app):
+    """Create the schema on a fresh database. Returns True if the schema is current.
+
+    An existing database with an older schema is never changed here: run `flask migrate`.
+    """
     conn = connect(app.config["DATABASE"])
+    conn.isolation_level = None  # explicit transactions
     try:
         conn.execute("PRAGMA journal_mode = WAL")
-        conn.executescript(SCHEMA)
-        cols = {r["name"] for r in conn.execute("PRAGMA table_info(users)")}
-        if "must_change_password" not in cols:
-            conn.execute("ALTER TABLE users ADD COLUMN must_change_password INTEGER NOT NULL DEFAULT 0")
-        ensure_admin(conn, app)
-        conn.commit()
+        conn.execute("BEGIN IMMEDIATE")  # serializes concurrent gunicorn workers on first start
+        if not table_exists(conn, "users"):
+            for stmt in SCHEMA:
+                conn.execute(stmt)
+            conn.execute(f"PRAGMA user_version = {LATEST_VERSION}")
+        current = schema_version(conn) == LATEST_VERSION
+        if current:
+            ensure_admin(conn, app.logger)
+        conn.execute("COMMIT")
+        return current
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
     finally:
         conn.close()
 
 
-def ensure_admin(conn, app):
+def ensure_admin(conn, logger):
     """First run only: create an admin with a random password. Flag legacy root/1234."""
     if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         password = secrets.token_urlsafe(12)
-        cur = conn.execute(
-            "INSERT OR IGNORE INTO users (username, password, must_change_password) VALUES (?, ?, 1)",
-            ("admin", generate_password_hash(password)),
-        )
-        if cur.rowcount == 1:  # another gunicorn worker may have won the race
-            print("=" * 60, flush=True)
-            print(f"Initial admin created. Username: admin  Password: {password}", flush=True)
-            print("You must change this password at first login.", flush=True)
-            print("=" * 60, flush=True)
+        conn.execute("INSERT INTO users (username, password, must_change_password) VALUES (?, ?, 1)",
+                     ("admin", generate_password_hash(password)))
+        print("=" * 60, flush=True)
+        print(f"Initial admin created. Username: admin  Password: {password}", flush=True)
+        print("You must change this password at first login.", flush=True)
+        print("=" * 60, flush=True)
         return
     root = conn.execute("SELECT id, password FROM users WHERE username = 'root'").fetchone()
     if root and check_password_hash(root["password"], "1234"):
         conn.execute("UPDATE users SET must_change_password = 1 WHERE id = ?", (root["id"],))
-        app.logger.warning("User 'root' still has the default password; a password change is now required.")
+        logger.warning("User 'root' still has the default password; a password change is now required.")

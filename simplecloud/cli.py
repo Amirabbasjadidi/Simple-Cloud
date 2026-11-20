@@ -1,193 +1,164 @@
-"""User management CLI (flask <command>)."""
-import os
-import sqlite3
+"""Server CLI: `flask <command> --help`. Every prompt has an option so commands also run non-interactively.
 
+Passwords: --password, the SIMPLECLOUD_PASSWORD env var, or a hidden prompt (click uses getpass).
+"""
+import click
 from flask import current_app
+from flask.cli import with_appcontext
 from werkzeug.security import generate_password_hash
 
-from .db import get_db
+from . import migrate as migrations
+from . import storage
+from .db import LATEST_VERSION, get_db, schema_version
+
+
+def _db():
+    db = get_db()
+    if schema_version(db) != LATEST_VERSION:
+        raise click.ClickException("Database schema is out of date. Run `flask migrate` first.")
+    return db
+
+
+def _user(db, username):
+    row = db.execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
+    if row is None:
+        raise click.ClickException(f"User {username!r} not found.")
+    return row
+
+
+password_option = click.option(
+    "--password", envvar="SIMPLECLOUD_PASSWORD", prompt=True, hide_input=True, confirmation_prompt=True,
+    help="Password (prompted securely if omitted; or set SIMPLECLOUD_PASSWORD).")
+
+
+@click.command("adduser")
+@click.option("--username", prompt=True)
+@password_option
+@with_appcontext
+def add_user(username, password):
+    """Add a user."""
+    db = _db()
+    username = username.strip()
+    if not username or not password:
+        raise click.ClickException("Username and password must not be empty.")
+    if db.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
+        raise click.ClickException(f"User {username!r} already exists.")
+    db.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, generate_password_hash(password)))
+    db.commit()
+    current_app.logger.info("cli_adduser username=%r", username)
+    click.echo(f"User {username} added.")
+
+
+@click.command("changepassword")
+@click.option("--username", prompt=True)
+@password_option
+@click.option("--force-change/--no-force-change", default=False, help="Require a change at next login.")
+@with_appcontext
+def change_password(username, password, force_change):
+    """Set a user's password."""
+    db = _db()
+    user = _user(db, username)
+    db.execute("UPDATE users SET password = ?, must_change_password = ? WHERE id = ?",
+               (generate_password_hash(password), int(force_change), user["id"]))
+    db.commit()
+    current_app.logger.info("cli_changepassword username=%r", username)
+    click.echo(f"Password for {username} updated.")
+
+
+@click.command("changeusername")
+@click.option("--old", "old_username", prompt="Current username")
+@click.option("--new", "new_username", prompt="New username")
+@with_appcontext
+def change_username(old_username, new_username):
+    """Rename a user. Files are linked by user id, so they follow automatically."""
+    db = _db()
+    user = _user(db, old_username)
+    new_username = new_username.strip()
+    if not new_username:
+        raise click.ClickException("New username must not be empty.")
+    if db.execute("SELECT 1 FROM users WHERE username = ?", (new_username,)).fetchone():
+        raise click.ClickException(f"Username {new_username!r} already exists.")
+    db.execute("UPDATE users SET username = ? WHERE id = ?", (new_username, user["id"]))
+    db.commit()
+    current_app.logger.info("cli_changeusername old=%r new=%r", old_username, new_username)
+    click.echo(f"Username changed from {old_username} to {new_username}.")
+
+
+@click.command("deleteuser")
+@click.option("--username", prompt=True)
+@click.option("--files", "files_action", type=click.Choice(["transfer", "delete"]),
+              help="What to do with the user's files.")
+@click.option("--to", "target", help="User that receives the files (with --files transfer).")
+@click.option("--yes", is_flag=True, help="Don't ask for confirmation.")
+@with_appcontext
+def delete_user(username, files_action, target, yes):
+    """Delete a user. Their files are transferred or deleted in the same transaction."""
+    db = _db()
+    user = _user(db, username)
+    count = db.execute("SELECT COUNT(*) FROM files WHERE user_id = ?", (user["id"],)).fetchone()[0]
+
+    if count and not files_action:
+        files_action = click.prompt(f"{username} has {count} file(s). Transfer or delete them?",
+                                    type=click.Choice(["transfer", "delete"]))
+    if count and files_action == "transfer" and not target:
+        target = click.prompt("Transfer files to which existing user")
+    target_row = None
+    if count and files_action == "transfer":
+        target_row = _user(db, target)
+        if target_row["id"] == user["id"]:
+            raise click.ClickException("Cannot transfer files to the user being deleted.")
+
+    summary = (f"Delete user {username!r}" +
+               ("" if not count else f" and {'DELETE' if files_action == 'delete' else 'transfer'} "
+                f"{count} file(s){' to ' + target if target_row else ''}"))
+    if not yes and not click.confirm(summary + "?"):
+        raise click.Abort()
+
+    stored = []
+    try:
+        db.execute("BEGIN IMMEDIATE")
+        if target_row:
+            db.execute("UPDATE files SET user_id = ? WHERE user_id = ?", (target_row["id"], user["id"]))
+        else:
+            stored = [r["stored_name"] for r in db.execute("SELECT stored_name FROM files WHERE user_id = ?",
+                                                           (user["id"],))]
+            db.execute("DELETE FROM files WHERE user_id = ?", (user["id"],))
+        db.execute("DELETE FROM users WHERE id = ?", (user["id"],))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    # Disk files go only after the commit: a crash leaves unreferenced files, never rows without files.
+    for name in stored:
+        storage.remove_quietly(storage.abs_path(name))
+    current_app.logger.info("cli_deleteuser username=%r files=%s count=%d", username, files_action, count)
+    click.echo(summary + ": done.")
+
+
+@click.command("listusers")
+@with_appcontext
+def list_users():
+    """List users."""
+    rows = _db().execute(
+        "SELECT u.id, u.username, COUNT(f.id) AS n, COALESCE(SUM(f.size), 0) AS bytes "
+        "FROM users u LEFT JOIN files f ON f.user_id = u.id GROUP BY u.id ORDER BY u.id").fetchall()
+    if not rows:
+        click.echo("No users found.")
+    for r in rows:
+        click.echo(f"ID: {r['id']}  Username: {r['username']}  Files: {r['n']}  Bytes: {r['bytes']}")
+
+
+@click.command("migrate")
+@click.option("--dry-run", is_flag=True, help="Print planned changes without changing anything.")
+@with_appcontext
+def migrate_cmd(dry_run):
+    """Upgrade the database and file storage (backs up first)."""
+    try:
+        migrations.run(current_app.config, dry_run=dry_run, echo=click.echo, logger=current_app.logger)
+    except migrations.MigrationError as e:
+        raise click.ClickException(str(e))
 
 
 def register(app):
-    app.cli.add_command(add_user)
-    app.cli.add_command(change_password)
-    app.cli.add_command(change_username)
-    app.cli.add_command(delete_user)
-    app.cli.add_command(list_users)
-    app.cli.add_command(helpme)
-
-
-class _Commands:
-    @staticmethod
-    def command(name):
-        import click
-        from flask.cli import with_appcontext
-        return lambda f: click.command(name)(with_appcontext(f))
-
-
-cli = _Commands()
-
-
-def add_user_helper(username, password):
-    hashed_password = generate_password_hash(password)
-    conn = get_db()
-    if True:
-        try:
-            conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, hashed_password))
-            conn.commit()
-            print(f"User {username} added successfully.")
-        except sqlite3.IntegrityError:
-            print(f"User {username} already exists.")
-
-
-@cli.command('adduser')
-def add_user():
-    username = input("Enter username: ")
-    password = input("Enter password: ")
-    add_user_helper(username, password)
-
-@cli.command('changepassword')
-def change_password():
-    username = input("Enter username: ")
-    new_password = input("Enter new password: ")
-    hashed_password = generate_password_hash(new_password)
-    conn = get_db()
-    if True:
-        user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-        if user:
-            conn.execute('UPDATE users SET password = ? WHERE username = ?', (hashed_password, username))
-            conn.commit()
-            print(f"Password for user {username} updated successfully.")
-        else:
-            print(f"User {username} not found.")
-
-
-@cli.command('changeusername')
-def change_username():
-    old_username = input("Enter current username: ")
-    new_username = input("Enter new username: ")
-
-    conn = get_db()
-    if True:
-        user = conn.execute('SELECT * FROM users WHERE username = ?', (old_username,)).fetchone()
-        if not user:
-            print(f"User {old_username} not found.")
-            return
-
-        existing_user = conn.execute('SELECT * FROM users WHERE username = ?', (new_username,)).fetchone()
-        if existing_user:
-            print(f"Error: The username {new_username} already exists. Please choose another one.")
-            return
-
-        try:
-            conn.execute('UPDATE users SET username = ? WHERE username = ?', (new_username, old_username))
-            conn.commit()
-
-            if conn.total_changes > 0:
-                print(f"Username changed from {old_username} to {new_username} successfully.")
-                print("Updating uploaded files...")
-
-                conn.execute('UPDATE files SET uploaded_by = ? WHERE uploaded_by = ?', (new_username, old_username))
-                conn.commit()
-
-                if conn.total_changes > 0:
-                    print("Uploaded files updated successfully.")
-                else:
-                    print("No uploaded files found for this user.")
-
-            else:
-                print("Failed to change username. No changes detected.")
-
-        except sqlite3.Error as e:
-            print(f"Database error: {e}")
-
-
-@cli.command('deleteuser')
-def delete_user():
-    username = input("Enter username to delete: ")
-    conn = get_db()
-    if True:
-        user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
-        if not user:
-            print(f"User {username} not found.")
-            return
-
-        conn.execute('DELETE FROM users WHERE username = ?', (username,))
-        conn.commit()
-        print(f"User {username} deleted successfully.")
-
-        while True:
-            new_owner = input(
-                "Enter an existing username to transfer files to, or type 'DELETE_FILES' to remove all files uploaded by this user: ")
-
-            if new_owner == "DELETE_FILES":
-                files = conn.execute('SELECT path FROM files WHERE uploaded_by = ?', (username,)).fetchall()
-
-                for file in files:
-                    file_path = file[0]
-                    if os.path.exists(file_path):
-                        try:
-                            os.remove(file_path)
-                        except Exception as e:
-                            print(f"Error deleting file {file_path}: {e}")
-
-                conn.execute('DELETE FROM files WHERE uploaded_by = ?', (username,))
-                conn.commit()
-                print(f"All files uploaded by {username} have been deleted from the server and database.")
-                return
-
-            existing_user = conn.execute('SELECT * FROM users WHERE username = ?', (new_owner,)).fetchone()
-            if existing_user:
-                conn.execute('UPDATE files SET uploaded_by = ? WHERE uploaded_by = ?', (new_owner, username))
-                conn.commit()
-                print(f"All files uploaded by {username} have been transferred to {new_owner}.")
-                return
-            else:
-                create_new = input(
-                    f"User {new_owner} does not exist. Do you want to create it? (y/n): ").strip().lower()
-                if create_new == 'y':
-                    new_password = input(f"Enter password for {new_owner}: ")
-                    add_user_helper(new_owner, new_password)
-                    conn.execute('UPDATE files SET uploaded_by = ? WHERE uploaded_by = ?', (new_owner, username))
-                    conn.commit()
-                    print(f"User {new_owner} created and all files from {username} transferred.")
-                    return
-                elif create_new == 'n':
-                    print("Please enter a valid username to transfer files to.")
-                else:
-                    print("Invalid input. Please enter 'y' or 'n'.")
-
-@cli.command('listusers')
-def list_users():
-    conn = get_db()
-    if True:
-        users = conn.execute('SELECT id, username FROM users').fetchall()
-        conn.commit()
-
-        if users:
-            print("Registered users:")
-            for user in users:
-                print(f"ID: {user['id']}, Username: {user['username']}")
-        else:
-            print("No users found.")
-
-    conn = get_db()
-    if True:
-        conn.execute('VACUUM;')
-
-
-@cli.command('help')
-def helpme():
-    commands = {
-        "adduser": "Adds a new user to the database.",
-        "changepassword": "Changes the password for an existing user.",
-        "changeusername": "Updates the username of an existing user and transfers associated files.",
-        "deleteuser": "Deletes a user and allows file transfer or removal.",
-        "listusers": "Lists all registered users.",
-    }
-
-    print("Available CLI commands:")
-    for cmd, desc in commands.items():
-        print(f"  flask {cmd} - {desc}")
-
-
+    for cmd in (add_user, change_password, change_username, delete_user, list_users, migrate_cmd):
+        app.cli.add_command(cmd)

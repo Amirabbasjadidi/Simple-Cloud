@@ -35,6 +35,8 @@ def load_config():
         "SECRET_KEY": get("SECRET_KEY"),
         "DATABASE": get("DATABASE", os.path.join(ROOT, "database.db")),
         "UPLOAD_FOLDER": get("UPLOAD_FOLDER", os.path.join(ROOT, "uploads")),
+        # Keep on the same filesystem as UPLOAD_FOLDER so migration backups can use hard links.
+        "BACKUP_FOLDER": get("BACKUP_FOLDER", os.path.join(ROOT, "backups")),
         "PORT": get_int("PORT", 8000),
         # Request body limit for uploads (bytes). Default 2 GiB.
         "MAX_CONTENT_LENGTH": get_int("MAX_CONTENT_LENGTH", 2 * 1024**3),

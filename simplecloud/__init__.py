@@ -31,7 +31,19 @@ def create_app(overrides=None):
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
     from . import auth, db, files, cli
-    db.init_db(app)
+    schema_ok = {"value": db.init_db(app)}
+    if not schema_ok["value"]:
+        app.logger.error("Database schema is out of date. Run `flask migrate --dry-run`, then `flask migrate`.")
+
+    @app.before_request
+    def require_current_schema():
+        if not schema_ok["value"]:
+            conn = db.connect(app.config["DATABASE"])
+            schema_ok["value"] = db.schema_version(conn) == db.LATEST_VERSION
+            conn.close()
+            if not schema_ok["value"]:
+                return "Database upgrade required: run `flask migrate` on the server.", 503
+
     app.teardown_appcontext(db.close_db)
     csrf.init_app(app)
     limiter.init_app(app)
