@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Settings") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _("Settings") }}</h1>
+</div>
+
+{% if current_user.must_change_password %}
+<div class="alert alert-warning" role="alert">{{ icon("alert") }}<span>{{ _("You must set a new password before using Simple Cloud.") }}</span></div>
+{% endif %}
+
+<section class="card" aria-labelledby="storage-title">
+    <h2 id="storage-title">{{ _("Storage") }}</h2>
+    {% include "_usage.html" %}
+</section>
+
+<section class="card" aria-labelledby="pw-title">
+    <h2 id="pw-title">{{ _("Change password") }}</h2>
+    <form id="password-form" class="form" novalidate>
+        <div class="field">
+            <label for="current-password">{{ _("Current password") }}</label>
+            <input id="current-password" type="password" autocomplete="current-password" required dir="ltr">
+        </div>
+        <div class="field">
+            <label for="new-password">{{ _("New password") }}</label>
+            <input id="new-password" type="password" autocomplete="new-password" required dir="ltr"
+                   minlength="{{ config.MIN_PASSWORD_LENGTH }}" aria-describedby="pw-hint">
+            <small id="pw-hint" class="hint">{{ _("At least %(n)s characters.", n=config.MIN_PASSWORD_LENGTH) }}</small>
+        </div>
+        <div class="field">
+            <label for="confirm-password">{{ _("Repeat new password") }}</label>
+            <input id="confirm-password" type="password" autocomplete="new-password" required dir="ltr">
+        </div>
+        <div><button type="submit" class="btn btn-primary">{{ _("Change password") }}</button></div>
+    </form>
+</section>
+
+<section class="card" aria-labelledby="tfa-title">
+    <h2 id="tfa-title">{{ _("Two-factor authentication") }}</h2>
+    {% if current_user.totp_enabled %}
+    <p class="status-line"><span class="badge badge-success">{{ _("On") }}</span><span>{{ _("Signing in requires a code from your authenticator app.") }}</span></p>
+    <form id="totp-disable-form" class="form" novalidate>
+        <div class="field">
+            <label for="tfa-off-password">{{ _("Password") }}</label>
+            <input id="tfa-off-password" type="password" autocomplete="current-password" required dir="ltr">
+        </div>
+        <div class="field">
+            <label for="tfa-off-code">{{ _("Current code") }}</label>
+            <input id="tfa-off-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required dir="ltr">
+        </div>
+        <div><button type="submit" class="btn btn-danger">{{ _("Turn off") }}</button></div>
+    </form>
+    {% else %}
+    <p class="status-line"><span class="badge">{{ _("Off") }}</span><span>{{ _("Add a second step to your sign-in with an authenticator app (for example Aegis, Google Authenticator or 1Password).") }}</span></p>
+    <button type="button" class="btn btn-primary" id="totp-start">{{ icon("shield") }}<span>{{ _("Set up") }}</span></button>
+    <div id="totp-setup" hidden>
+        <ol class="steps">
+            <li>{{ _("Scan this QR code with your authenticator app:") }}
+                <div id="totp-qr" class="qr" role="img" aria-label="{{ _('QR code for the authenticator app') }}"></div>
+                <details><summary>{{ _("Cannot scan? Enter this key instead") }}</summary><code id="totp-secret" class="secret" dir="ltr"></code></details>
+            </li>
+            <li>
+                <form id="totp-enable-form" class="form" novalidate>
+                    <div class="field">
+                        <label for="tfa-code">{{ _("Enter the 6-digit code shown in the app") }}</label>
+                        <input id="tfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required dir="ltr">
+                    </div>
+                    <div><button type="submit" class="btn btn-primary">{{ _("Turn on") }}</button></div>
+                </form>
+            </li>
+        </ol>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/qrcode.js') }}"></script>
+<script src="{{ url_for('static', filename='account.js') }}"></script>
+{% endblock %}

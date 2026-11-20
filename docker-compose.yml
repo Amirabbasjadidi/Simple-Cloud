@@ -1,0 +1,24 @@
+# Alternative install: docker compose up -d
+# Needs a .env file next to this one with at least SECRET_KEY=... (see .env.example).
+services:
+  app:
+    build: .
+    env_file: .env
+    volumes:
+      - simplecloud-data:/data
+    restart: unless-stopped
+    expose:
+      - "8000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    depends_on:
+      - app
+    ports:
+      - "80:80"
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    restart: unless-stopped
+
+volumes:
+  simplecloud-data:

@@ -1,41 +1,47 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Login Page</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='login.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='cloud.png') }}" type="image/png">
-</head>
-<body>
-    <div class="login-container">
-        <h1>Login</h1>
-        <form id="login-form" method="POST" action="/login">
-            <input type="text" id="username" name="username" placeholder="Username" required>
-            <input type="password" id="password" name="password" placeholder="Password" required>
-            <div class="captcha-container">
-                <div class="captcha-wrapper">
-                    <img id="captcha-image" src="data:image/png;base64,{{ captcha_image }}" alt="Captcha">
-                    <span class="tooltip">Click to refresh captcha</span>
-                </div>
-                <input type="text" id="captcha" name="captcha" placeholder="Enter Captcha" required>
-            </div>
-
-
-            <div class="checkbox-container">
-                <label>
-                    <input type="checkbox" id="remember-me" name="remember-me" checked>
-                    Remember me
-                </label>
-                <label>
-                    <input type="checkbox" id="hide-character" name="hide-character" checked>
-                    Hide Character
-                </label>
-            </div>
-
-            <button type="submit">Login</button>
-        </form>
+{% extends "base.html" %}
+{% set bare = true %}
+{% block title %}{{ _("Sign in") }}{% endblock %}
+{% block content %}
+<section class="card auth-card" aria-labelledby="login-title">
+    <div class="auth-brand">
+        {{ icon("cloud") }}
+        <h1 id="login-title">{{ _("Simple Cloud") }}</h1>
+        <p class="muted">{{ _("Sign in to your files") }}</p>
     </div>
-    <script src="{{ url_for('static', filename='login.js') }}"></script>
-</body>
-</html>
+
+    <form id="login-form" class="form" novalidate>
+        <div class="field">
+            <label for="username">{{ _("Username") }}</label>
+            <input type="text" id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required dir="auto">
+        </div>
+        <div class="field">
+            <label for="password">{{ _("Password") }}</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required dir="ltr">
+        </div>
+        <div class="field">
+            <label for="captcha">{{ _("Answer the math question in the image") }}</label>
+            <div class="captcha-row">
+                <img id="captcha-image" src="data:image/png;base64,{{ captcha_image }}" alt="{{ _('Security check image') }}" width="200" height="100">
+                <button type="button" class="btn btn-icon" id="captcha-refresh" aria-label="{{ _('New image') }}" title="{{ _('New image') }}">{{ icon("refresh") }}</button>
+                <input type="text" id="captcha" name="captcha" autocomplete="off" autocapitalize="none" spellcheck="false" required dir="ltr" inputmode="numeric">
+            </div>
+        </div>
+        <div class="form-row">
+            <label class="check"><input type="checkbox" id="remember-me" name="remember-me" checked> {{ _("Remember me") }}</label>
+            <label class="check"><input type="checkbox" id="show-password"> {{ _("Show password") }}</label>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">{{ _("Sign in") }}</button>
+    </form>
+
+    <form id="totp-form" class="form" hidden novalidate>
+        <div class="field">
+            <label for="totp-code">{{ _("Enter the 6-digit code from your authenticator app") }}</label>
+            <input type="text" id="totp-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" required dir="ltr">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">{{ _("Verify") }}</button>
+    </form>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='login.js') }}"></script>
+{% endblock %}

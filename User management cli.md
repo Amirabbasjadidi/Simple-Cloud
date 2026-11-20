@@ -1,88 +1,69 @@
-# Simple Cloud - User Management CLI Guide
+# Simple Cloud: command-line tool
 
-This guide explains how to use the available CLI commands for managing users in the Simple Cloud application.
+Most user management is also available in the web interface (**Admin**, for admins). The
+command line is for the server's shell: first setup, recovery, scripting.
 
-## Prerequisites
+## Running a command
 
-Before running any commands, make sure to activate your virtual environment:
+On a server installed with `install.sh`, run commands as the service user, from the code
+directory, pointing at the config file:
 
-```sh
-source venv/bin/activate
+```bash
+cd /opt/simplecloud
+sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app <command> [options]
 ```
 
-## Viewing Available Commands
+To save typing, define a shell alias once:
 
-You can view all available CLI commands along with their descriptions by running:
-
-```sh
-flask help
+```bash
+alias sc='cd /opt/simplecloud && sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app'
 ```
+
+Then: `sc listusers`. With Docker: `docker compose exec app flask --app app <command>`.
+
+Every command prints its options with `--help`. Anything not given as an option is asked for.
+**Passwords** are asked for twice with hidden input; for scripts, pass them in the
+`SIMPLECLOUD_PASSWORD` environment variable instead (avoid `--password` on the command line,
+which ends up in the shell history).
 
 ## Commands
 
-### Add a User
+| Command | What it does |
+|---|---|
+| `adduser --username NAME [--admin] [--quota MB]` | Create a user. |
+| `changepassword --username NAME [--force-change]` | Set a new password. Signs the user out everywhere. `--force-change` makes them choose a new one at next sign-in. |
+| `setadmin --username NAME [--no-admin]` | Give (or with `--no-admin` remove) the admin role. The last admin cannot be removed. |
+| `disable2fa --username NAME` | Turn off two-factor sign-in for someone who lost their phone. |
+| `changeusername --old NAME --new NAME` | Rename a user. Their files stay theirs. |
+| `deleteuser --username NAME [--files transfer --to OTHER \| --files delete] [--yes]` | Delete a user. A user who owns files needs `--files`: transfer them to another user, or delete them permanently. Asks for confirmation unless `--yes`. |
+| `listusers` | List users with id, admin and disabled flags, file count and bytes used. |
+| `backup [--output-dir DIR] [--keep N]` | Write `simplecloud-YYYYmmdd-HHMMSS.tar.gz` (database snapshot + uploads). `--keep N` deletes all but the newest N archives in that directory. Safe while the app runs. |
+| `migrate [--dry-run]` | Bring the database up to date after an upgrade. Takes a backup first, is resumable, and `--dry-run` only prints the plan. The installer runs it for you. |
 
-Adds a new user to the database.
+## Examples
 
-```sh
-flask adduser
+```bash
+# a new colleague with 20 GB of space
+sc adduser --username sara --quota 20480
+
+# an admin forgot their password and is locked out
+sc changepassword --username admin --force-change
+
+# someone lost the phone with their authenticator app
+sc disable2fa --username sara
+
+# someone leaves: hand their files to a colleague
+sc deleteuser --username sara --files transfer --to reza
+
+# scripted user creation
+SIMPLECLOUD_PASSWORD='temporary-pass-123' sc adduser --username guest
 ```
 
-- You will be prompted to enter a username and password.
-- If the username already exists, an error message will be displayed.
+## First admin
 
-### Change a User's Password
+On the very first start an `admin` account is created with a random password, printed once
+in the installer output (look for `Initial admin`). It must be changed at first sign-in. If you
+missed it, set a new one with `changepassword --username admin --force-change`.
 
-Updates the password for an existing user.
-
-```sh
-flask changepassword
-```
-
-- You will be prompted to enter the username and a new password.
-- If the user does not exist, an error message will be displayed.
-
-### Change a User's Username
-
-Updates the username of an existing user.
-
-```sh
-flask changeusername
-```
-
-- You will be prompted to enter the current username and the new username.
-- If the current username does not exist, an error message will be displayed.
-- If the new username is already taken, an error message will be displayed.
-- Uploaded files associated with the user will be updated to reflect the new username.
-
-### Delete a User
-
-Deletes a user from the database and provides options for handling their uploaded files.
-
-```sh
-flask deleteuser
-```
-
-- You will be prompted to enter the username to delete.
-- If the user exists, you will have the option to:
-  - Transfer their files to another existing user.
-  - Create a new user to transfer the files to.
-  - Delete all files uploaded by the user.
-
-### List All Users
-
-Displays a list of all registered users.
-
-```sh
-flask listusers
-```
-
-- Shows user IDs and usernames.
-- If no users are found, a message is displayed.
-
----
-
-After running any of these commands, the database is optimized by running the `VACUUM;` command.
-
-For further details, use `flask help` to get descriptions of each command directly in the terminal.
-
+All commands write a line to the log (`journalctl -u simplecloud` for web actions; the
+terminal for CLI runs), for example `event=cli_adduser user=sara admin=False`.

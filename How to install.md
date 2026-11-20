@@ -1,143 +1,215 @@
-# Setup Guide for Simple Cloud Service
+# How to install Simple Cloud
 
-🚀 **Quick Installation:** Instead of following the steps manually, you can simply download and run the `install.sh` script, which automates the entire setup process.
+This guide installs Simple Cloud on a fresh **Ubuntu Server 24.04** and serves it on the LAN
+over **plain HTTP** at `http://cloud.local`. Debian 12 works the same way.
 
-### **How to Use install.sh**
+What the installer sets up:
+
+| Part | Where |
+|---|---|
+| Code (owned by root, read-only for the app) | `/opt/simplecloud` |
+| Database, uploads, backups | `/var/lib/simplecloud` |
+| Settings, including the generated `SECRET_KEY` | `/etc/simplecloud.env` |
+| App service (gunicorn on 127.0.0.1:8000, user `simplecloud`) | `simplecloud.service` |
+| Web server on port 80 | Nginx site `/etc/nginx/sites-available/simplecloud` |
+| Optional daily backup | `simplecloud-backup.timer` |
+
+## 1. Install
+
 ```bash
-wget https://raw.githubusercontent.com/Amirabbasjadidi/Simple-Cloud/main/install.sh
-chmod +x install.sh
-sudo ./install.sh
-```
-
-This script will automatically set up everything for you, including dependencies, virtual environment, and the systemd service.
-
----
-
-## 1. Update System and Install Dependencies
-
-```
-sudo apt update && sudo apt upgrade -y
-sudo apt install python3 python3-pip python3-venv -y
-```
-
-## 2. Clone the Project and Create Virtual Environment
-
-```
-cd /path/to/your/project
+sudo apt update && sudo apt install -y git
 git clone https://github.com/Amirabbasjadidi/Simple-Cloud.git
 cd Simple-Cloud
-python3 -m venv venv
-source venv/bin/activate
+sudo ./install.sh --domain cloud.local --backup-timer
 ```
 
-## 3. Install Required Packages
+The installer clones the `main` branch into `/opt/simplecloud` (the clone you ran it from is only
+used to start it). Options:
+
+| Option | Meaning |
+|---|---|
+| `--domain NAME` | Name the site answers to (Nginx `server_name`). Without it, it answers on any name/IP. |
+| `--pip-index URL` | Install Python packages from a PyPI mirror, for example `--pip-index http://pypi.mirror.local/simple` (an `http://` mirror is marked trusted automatically). |
+| `--backup-timer` | Back up every night at 03:00. |
+| `--backup-keep N` | How many nightly archives to keep (default 14). |
+| `--workers N` | gunicorn worker processes (default 4). |
+| `--branch NAME`, `--repo URL` | Install another branch or a fork. |
+| `--dir PATH`, `--data-dir PATH` | Other locations for the code and the data. |
+| `--import-from PATH` | Copy `database.db` and `uploads/` from an old install (see section 7). |
+| `--upgrade` | Also run `apt upgrade`. |
+
+The installer is safe to run again: it keeps your settings and data.
+
+## 2. The first admin password
+
+On a fresh install the end of the output contains:
 
 ```
-pip install -r requirements.txt
+============================================================
+Initial admin created. Username: admin  Password: Xy3...
+You must change this password at first login.
+============================================================
 ```
 
-
-## 4. Generate and Store SECRET_KEY
-
-### Generate a Random SECRET_KEY
+Sign in as `admin` with that password; you will be asked to choose a new one. It is shown only
+once. If you missed it, set a new one:
 
 ```bash
-openssl rand -hex 32
+cd /opt/simplecloud
+sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app changepassword --username admin --force-change
 ```
 
-#### Example Output:
+Then create accounts for your colleagues under **Admin** in the web interface, or with the
+command line ([User management cli.md](./User%20management%20cli.md)).
+
+## 3. A name on the network: DNS on the MikroTik router
+
+Give the server a fixed address first (a DHCP lease reservation or a static IP), then add a
+static DNS record on the MikroTik router so every computer on the LAN can open `http://cloud.local`:
+
 ```
-f23a5d6c8e9b1a7f32c4d8e90b56a3df0c2e1f78b45e6c9d1a23b4c8d0e5f1a2
+/ip dns static add name=cloud.local address=<server-ip>
 ```
 
-### Save `SECRET_KEY` in a Secure File
+For example `/ip dns static add name=cloud.local address=192.168.88.20`. The clients must use the
+router as their DNS server (the default with MikroTik DHCP), and the router must answer
+queries (`/ip dns set allow-remote-requests=yes`; keep port 53 closed on the WAN side in the
+firewall). Check from a client:
 
 ```bash
-echo "SECRET_KEY=f23a5d6c8e9b1a7f32c4d8e90b56a3df0c2e1f78b45e6c9d1a23b4c8d0e5f1a2" | sudo tee /etc/simplecloud.env
-sudo chmod 600 /etc/simplecloud.env
+nslookup cloud.local
 ```
 
----
+Then open **http://cloud.local** in a browser. (`.local` names can also be claimed by mDNS on
+some clients; if a Mac or Linux PC does not resolve it, use a name such as `cloud.lan`, both in the
+MikroTik record and in `--domain`.)
 
-## 5. Setup Flask as a Systemd Service
+The site uses plain HTTP: no certificate is needed and nothing in the app redirects to HTTPS.
+Passwords cross the LAN unencrypted, so use it only on a network you trust. If you add HTTPS
+later (your own reverse proxy or certificate), also set `COOKIE_SECURE=1` in
+`/etc/simplecloud.env`; the installer will not overwrite an Nginx site you edited.
 
-### Create the Service File
+## 4. Settings
+
+Edit `/etc/simplecloud.env`, then `sudo systemctl restart simplecloud`. Common settings:
+`DEFAULT_LANG` (`fa` or `en`), `DEFAULT_QUOTA_BYTES`, `MAX_FILE_SIZE`, `MAX_CONTENT_LENGTH`
+(re-run the installer after changing it, so Nginx accepts the new size). The full list is in the
+[README](./README.md#configuration).
+
+Useful commands:
 
 ```bash
-sudo nano /etc/systemd/system/simplecloud.service
+systemctl status simplecloud              # is it running?
+journalctl -u simplecloud -n 100          # recent log (sign-ins, uploads, errors)
+journalctl -u simplecloud | grep event=login_failed
 ```
 
-### Add the Following Content
+## 5. Backups
 
-```
-[Unit]
-Description=Simple Cloud Service
-After=network.target
+A backup is one file, `simplecloud-YYYYmmdd-HHMMSS.tar.gz`, containing a consistent snapshot of
+the database (taken with SQLite's online backup API, so the app keeps running) and all uploaded
+files. Archives are readable only by the `simplecloud` user: they contain every user's files.
 
-[Service]
-User=your_user  # Replace with your actual username
-WorkingDirectory=/path/to/your/project  # Replace with the actual project path
-Environment="PATH=/path/to/your/project/venv/bin"  # Replace with the actual Environment (PATH)
-ExecStart=/path/to/your/project/venv/bin/gunicorn -w 4 -b 0.0.0.0:80 --timeout 600 app:app # Replace with the actual project path
-Restart=always
+**Daily, automatic:** install with `--backup-timer` (or re-run the installer with it). Archives
+go to `/var/lib/simplecloud/backups`, the newest 14 are kept (`--backup-keep N`).
 
-[Install]
-WantedBy=multi-user.target
+```bash
+systemctl list-timers simplecloud-backup     # next run
+journalctl -u simplecloud-backup             # results
 ```
 
-**Note:** Only edit `User`, `WorkingDirectory`, `Environment (PATH)`, and ensure the correct `ExecStart` path. Do not modify other sections unless necessary.
+**By hand, any time:**
 
-## 6. Allow Python to Bind to Port 80
-
-### Find the Real Python Path
-
-```
-readlink -f /path/to/your/project/venv/bin/python3
+```bash
+cd /opt/simplecloud
+sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app backup
 ```
 
-#### Example Output:
+A backup on the same disk does not protect against a dead disk: copy the archives to another
+machine, for example from that machine every night:
 
-```
-/usr/bin/python3.12
-```
-
-### Grant Permission to Use Port 80
-
-```
-sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.12
+```bash
+rsync -a admin@cloud.local:/var/lib/simplecloud/backups/ /srv/backup/simplecloud/
 ```
 
-**Note:** Running Flask directly on port 80 is suitable for local network applications. However, for larger deployments, it is recommended to use Nginx or a similar reverse proxy for better security and performance.
+(Make the archives readable for that account, or run rsync as root on the server side.)
 
-## 7. Enable and Start the Service
+## 6. Restore
 
+Restoring replaces the current database and files with those in the archive. The steps below keep
+the current data next to it (renamed), so nothing is lost if you picked the wrong archive.
+
+```bash
+ARCHIVE=/var/lib/simplecloud/backups/simplecloud-20261120-030000.tar.gz   # the one to restore
+D=/var/lib/simplecloud
+NOW=$(date +%Y%m%d-%H%M%S)
+
+sudo systemctl stop simplecloud simplecloud-backup.timer
+
+# 1. move the current data aside (not deleted)
+sudo mkdir "$D/before-restore-$NOW"
+sudo mv "$D/uploads" "$D"/database.db* "$D/before-restore-$NOW/"
+
+# 2. unpack the archive
+sudo mkdir "$D/restore-$NOW"
+sudo tar -xzf "$ARCHIVE" -C "$D/restore-$NOW"
+sudo mv "$D/restore-$NOW/database.db" "$D/restore-$NOW/uploads" "$D/"
+sudo rmdir --ignore-fail-on-non-empty "$D/restore-$NOW"
+sudo chown -R simplecloud:simplecloud "$D"
+
+# 3. bring an older backup up to the installed version (no-op otherwise), then start
+cd /opt/simplecloud
+sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app migrate
+sudo systemctl start simplecloud simplecloud-backup.timer
 ```
-sudo systemctl daemon-reload
-sudo systemctl enable simplecloud
-sudo systemctl start simplecloud
+
+Check that you can sign in and open some files. When you are sure, remove
+`/var/lib/simplecloud/before-restore-*` yourself.
+
+On a **new server**, run the installer first, then follow the same steps. Copy the old
+`SECRET_KEY` line from the old `/etc/simplecloud.env` if you want existing "remember me" sign-ins
+to stay valid (otherwise everyone just signs in again).
+
+## 7. Upgrading
+
+```bash
+cd ~/Simple-Cloud && git pull          # the copy you installed from
+sudo ./install.sh --domain cloud.local --backup-timer
 ```
 
-## 8. Check Service Status
+The installer pulls the newest `main` into `/opt/simplecloud`, updates the Python packages,
+upgrades the database and restarts the service. Before changing the database schema it writes a
+backup to `/var/lib/simplecloud/backups/<timestamp>/` automatically, and the migration can be
+resumed if it is interrupted. To see what an upgrade would change without changing anything:
 
-```
-sudo systemctl status simplecloud
-```
-
-### Debugging in Case of Issues
-If the service fails to start, use the following command to check logs:
-```
-sudo journalctl -u simplecloud --no-pager | tail -n 20
+```bash
+cd /opt/simplecloud
+sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app migrate --dry-run
 ```
 
-## 9. Access the Flask Application
+**From the original Simple Cloud (before this version):** run the installer with
+`--import-from /path/to/old/Simple-Cloud`. It copies (never moves) the old `database.db` and
+`uploads/` into the new data directory and migrates them: files get random storage names and are
+linked to their owners by user id. The old `root` account becomes an admin and, if it still has
+the password `1234`, must choose a new password at the next sign-in. Stop the old service first
+(`sudo systemctl disable --now simplecloud` if it used that name) so it does not hold port 80.
 
+## 8. Docker (alternative)
+
+```bash
+cp .env.example .env        # then set SECRET_KEY (openssl rand -hex 32)
+docker compose up -d
+docker compose logs app | grep -A2 "Initial admin"
+docker compose exec app flask --app app backup     # archives land in the data volume, /data/backups
 ```
-curl -I http://your_server_ip
-```
 
-If you see a `200 OK` response, your service is running correctly.
+## Troubleshooting
 
-## ⭐ Support the Project
-
-If you find this project useful, consider giving it a star on GitHub! 🌟
-[GitHub Repository](https://github.com/Amirabbasjadidi/Simple-Cloud)
+| Symptom | Check |
+|---|---|
+| `502 Bad Gateway` | `journalctl -u simplecloud -n 50`; the app is not running or failed at start. |
+| "Database upgrade required" | Run `flask migrate` as shown in section 7. |
+| Large uploads fail | `MAX_CONTENT_LENGTH`/`MAX_FILE_SIZE` in `/etc/simplecloud.env`, then re-run the installer. |
+| "Too many failed attempts" | Wait 15 minutes, or reset the password with the CLI. |
+| `cloud.local` does not resolve | Section 3: the MikroTik record, and that the client uses the router for DNS. |
+| Sign-in loops back to the login page | `COOKIE_SECURE` must be `0` on plain HTTP. |

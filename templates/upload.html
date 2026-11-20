@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Upload") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _("Upload files") }}</h1>
+</div>
+<p class="muted" id="upload-target">{{ _("Uploading to") }} <a href="{{ url_for('files.files_page') }}" id="target-link" dir="auto">{{ _("My files") }}</a></p>
+
+<div class="dropzone" id="dropzone">
+    {{ icon("upload", "icon-xl") }}
+    <p><strong>{{ _("Drag and drop files here") }}</strong></p>
+    <p class="muted">{{ _("or") }}</p>
+    <label class="btn btn-primary" for="file-input">{{ icon("file") }}<span>{{ _("Choose files") }}</span></label>
+    <input type="file" id="file-input" multiple class="sr-only">
+    <p class="hint">{{ _("Large uploads continue where they stopped if the connection drops or you select the same file again.") }}</p>
+</div>
+
+<section aria-labelledby="queue-title" class="queue-section">
+    <h2 id="queue-title">{{ _("Upload queue") }}</h2>
+    <ul id="queue" class="queue" role="list"></ul>
+    <p class="queue-empty" id="queue-empty">{{ _("No uploads yet. Files you add appear here with their progress.") }}</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='upload.js') }}"></script>
+{% endblock %}

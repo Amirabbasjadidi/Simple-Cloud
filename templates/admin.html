@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Admin") }}{% endblock %}
+{% block content %}
+<div class="page-head">
+    <h1>{{ _("Users") }}</h1>
+</div>
+
+<section class="card" aria-labelledby="new-user-title">
+    <h2 id="new-user-title">{{ _("Create user") }}</h2>
+    <form id="create-form" class="form form-inline" novalidate>
+        <div class="field">
+            <label for="new-username">{{ _("Username") }}</label>
+            <input id="new-username" autocomplete="off" required dir="auto">
+        </div>
+        <div class="field">
+            <label for="new-password">{{ _("Password") }}</label>
+            <input id="new-password" type="password" autocomplete="new-password" required dir="ltr"
+                   minlength="{{ config.MIN_PASSWORD_LENGTH }}">
+        </div>
+        <div class="field">
+            <label for="new-quota">{{ _("Quota (MB, empty = unlimited)") }}</label>
+            <input id="new-quota" type="number" min="0" inputmode="numeric">
+        </div>
+        <label class="check"><input id="new-admin" type="checkbox"> {{ _("Admin") }}</label>
+        <div><button type="submit" class="btn btn-primary">{{ _("Create") }}</button></div>
+    </form>
+</section>
+
+<section class="card" aria-labelledby="users-title">
+    <h2 id="users-title">{{ _("All users") }}</h2>
+    <div class="table-wrap">
+        <table class="table-cards">
+            <thead>
+            <tr><th scope="col">{{ _("User") }}</th><th scope="col">{{ _("Role") }}</th><th scope="col">{{ _("Status") }}</th>
+                <th scope="col">{{ _("Usage") }}</th><th scope="col">{{ _("Quota (MB)") }}</th><th scope="col"><span class="sr-only">{{ _("Actions") }}</span></th></tr>
+            </thead>
+            <tbody id="users-body"><tr><td colspan="6" class="muted">{{ _("Loading…") }}</td></tr></tbody>
+        </table>
+    </div>
+</section>
+
+<dialog id="delete-dialog" class="dialog" aria-labelledby="delete-title">
+    <form method="dialog" id="delete-form">
+        <h2 id="delete-title" class="dialog-title">{{ _("Delete user") }}</h2>
+        <p id="delete-summary"></p>
+        <fieldset id="delete-files">
+            <legend>{{ _("Their files") }}</legend>
+            <label class="check"><input type="radio" name="files" value="transfer" checked> {{ _("Transfer to") }}</label>
+            <input id="delete-to" aria-label="{{ _('Username to receive the files') }}" dir="auto">
+            <label class="check"><input type="radio" name="files" value="delete"> {{ _("Delete permanently") }}</label>
+        </fieldset>
+        <div class="dialog-actions">
+            <button type="button" value="cancel" class="btn">{{ _("Cancel") }}</button>
+            <button value="ok" class="btn btn-danger">{{ _("Delete user") }}</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
+{% endblock %}
