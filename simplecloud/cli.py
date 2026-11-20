@@ -172,7 +172,18 @@ def migrate_cmd(dry_run):
         raise click.ClickException(str(e))
 
 
+@click.command("backup")
+@click.option("--output-dir", type=click.Path(file_okay=False), help="Where to write the archive (default: BACKUP_FOLDER).")
+@click.option("--keep", type=click.IntRange(min=1), help="Keep only the newest N archives in that directory.")
+@with_appcontext
+def backup_cmd(output_dir, keep):
+    """Write a .tar.gz with a consistent database snapshot and all uploads (safe while running)."""
+    from . import backup
+    path = backup.create(current_app.config, out_dir=output_dir, keep=keep, echo=click.echo)
+    log_event("cli_backup", path=path)
+
+
 def register(app):
     for cmd in (add_user, change_password, set_admin, disable_2fa, change_username, delete_user, list_users,
-                migrate_cmd):
+                migrate_cmd, backup_cmd):
         app.cli.add_command(cmd)
