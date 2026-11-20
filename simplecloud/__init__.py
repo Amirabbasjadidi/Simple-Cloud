@@ -34,7 +34,7 @@ def create_app(overrides=None):
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-    from . import auth, db, files, cli
+    from . import admin, auth, cli, db, files
     schema_ok = {"value": db.init_db(app)}
     if not schema_ok["value"]:
         app.logger.error("Database schema is out of date. Run `flask migrate --dry-run`, then `flask migrate`.")
@@ -54,6 +54,7 @@ def create_app(overrides=None):
     auth.login_manager.init_app(app)
     app.register_blueprint(auth.bp)
     app.register_blueprint(files.bp)
+    app.register_blueprint(admin.bp)
     cli.register(app)
 
     @app.errorhandler(413)

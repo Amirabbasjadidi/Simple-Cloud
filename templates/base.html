@@ -20,6 +20,7 @@
     <nav id="main-nav" class="main-nav" aria-label="Main">
         {% set nav = [('files.files_page', 'Files'), ('files.upload_page', 'Upload'),
                       ('files.download_page', 'Fetch URL'), ('auth.account_page', 'Settings')] %}
+        {% if current_user.is_admin %}{% set nav = nav + [('admin.admin_page', 'Admin')] %}{% endif %}
         {% for endpoint, label in nav %}
         <a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ label }}</a>
         {% endfor %}

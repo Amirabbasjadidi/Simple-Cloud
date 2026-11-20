@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Admin{% endblock %}
+{% block content %}
+<h1>Users</h1>
+
+<section class="card" aria-labelledby="new-user-title">
+    <h2 id="new-user-title">Create user</h2>
+    <form id="create-form" class="form form-inline" novalidate>
+        <div class="field">
+            <label for="new-username">Username</label>
+            <input id="new-username" autocomplete="off" required>
+        </div>
+        <div class="field">
+            <label for="new-password">Password</label>
+            <input id="new-password" type="password" autocomplete="new-password" required
+                   minlength="{{ config.MIN_PASSWORD_LENGTH }}">
+        </div>
+        <div class="field">
+            <label for="new-quota">Quota (MB, empty = unlimited)</label>
+            <input id="new-quota" type="number" min="0" inputmode="numeric">
+        </div>
+        <label class="check"><input id="new-admin" type="checkbox"> Admin</label>
+        <button type="submit" class="btn btn-primary">Create</button>
+    </form>
+</section>
+
+<section class="card" aria-labelledby="users-title">
+    <h2 id="users-title">All users</h2>
+    <div class="table-wrap">
+        <table>
+            <thead>
+            <tr><th scope="col">User</th><th scope="col">Role</th><th scope="col">Status</th>
+                <th scope="col">Usage</th><th scope="col">Quota (MB)</th><th scope="col"><span class="sr-only">Actions</span></th></tr>
+            </thead>
+            <tbody id="users-body"><tr><td colspan="6" class="muted">Loading…</td></tr></tbody>
+        </table>
+    </div>
+</section>
+
+<dialog id="delete-dialog" class="dialog" aria-labelledby="delete-title">
+    <form method="dialog" id="delete-form">
+        <h2 id="delete-title" class="dialog-title">Delete user</h2>
+        <p id="delete-summary"></p>
+        <fieldset id="delete-files">
+            <legend>Their files</legend>
+            <label class="check"><input type="radio" name="files" value="transfer" checked> Transfer to</label>
+            <input id="delete-to" aria-label="Username to receive the files">
+            <label class="check"><input type="radio" name="files" value="delete"> Delete permanently</label>
+        </fieldset>
+        <div class="dialog-actions">
+            <button value="cancel" class="btn">Cancel</button>
+            <button value="ok" class="btn btn-danger">Delete user</button>
+        </div>
+    </form>
+</dialog>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='admin.js') }}"></script>
+{% endblock %}
