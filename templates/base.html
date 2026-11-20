@@ -1,45 +1,84 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ lang }}" dir="{{ lang_dir }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{% block title %}{% endblock %} · Simple Cloud</title>
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}{% endblock %} · {{ _("Simple Cloud") }}</title>
     <link rel="icon" href="{{ url_for('static', filename='cloud.png') }}" type="image/png">
+    <script src="{{ url_for('static', filename='theme.js') }}"></script>
+    <link rel="preload" href="{{ url_for('static', filename='fonts/vazirmatn/Vazirmatn-wght.woff2') }}" as="font" type="font/woff2" crossorigin>
     <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}">
+    <script type="application/json" id="i18n-data">{{ i18n_json|safe }}</script>
 </head>
+{%- set next_path = request.full_path.rstrip('?') %}
+{%- macro prefs() %}
+<div class="prefs">
+    {% for code, info in languages.items() if code != lang %}
+    <a class="btn btn-sm btn-ghost" href="{{ url_for('i18n.set_language', code=code, next=next_path) }}"
+       lang="{{ code }}" hreflang="{{ code }}">{{ icon("language") }}<span>{{ info.name }}</span></a>
+    {% endfor %}
+    <button type="button" class="btn btn-sm btn-ghost" data-action="theme" aria-pressed="false">
+        {{ icon("moon", "theme-dark") }}{{ icon("sun", "theme-light") }}<span>{{ _("Dark mode") }}</span>
+    </button>
+</div>
+{%- endmacro %}
 <body class="{% block body_class %}{% endblock %}">
-<a class="skip-link" href="#main">Skip to content</a>
-{% if current_user.is_authenticated %}
-<header class="topbar">
-    <a class="brand" href="{{ url_for('files.files_page') }}">
-        <img src="{{ url_for('static', filename='cloud.png') }}" alt="" width="28" height="28">
-        <span>Simple Cloud</span>
-    </a>
-    <button class="nav-toggle btn btn-ghost" type="button" aria-expanded="false" aria-controls="main-nav">Menu</button>
-    <nav id="main-nav" class="main-nav" aria-label="Main">
-        {% set nav = [('files.files_page', 'Files'), ('files.upload_page', 'Upload'),
-                      ('files.download_page', 'Fetch URL'), ('shares.shares_page', 'Shares'),
-                      ('auth.account_page', 'Settings')] %}
-        {% if current_user.is_admin %}{% set nav = nav + [('admin.admin_page', 'Admin')] %}{% endif %}
-        {% for endpoint, label in nav %}
-        <a href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ label }}</a>
-        {% endfor %}
-        <button type="button" class="btn btn-ghost" data-action="logout">Log out</button>
-    </nav>
-</header>
+<a class="skip-link" href="#main">{{ _("Skip to content") }}</a>
+{% if current_user.is_authenticated and not bare %}
+<div class="shell">
+    <div class="shell-side">
+        <header class="topbar">
+            <a class="brand" href="{{ url_for('files.files_page') }}">{{ icon("cloud") }}<span>{{ _("Simple Cloud") }}</span></a>
+            <button class="nav-toggle btn btn-icon btn-ghost" type="button" aria-expanded="false" aria-controls="sidebar"
+                    aria-label="{{ _('Menu') }}">{{ icon("menu") }}</button>
+        </header>
+        <div class="sidebar" id="sidebar">
+            <nav class="main-nav" aria-label="{{ _('Main') }}">
+                {% set nav = [('files.files_page', 'Files', 'folder'), ('files.upload_page', 'Upload', 'upload'),
+                              ('files.download_page', 'Fetch URL', 'globe-down'), ('shares.shares_page', 'Shares', 'link'),
+                              ('auth.account_page', 'Settings', 'settings')] %}
+                {% if current_user.is_admin %}{% set nav = nav + [('admin.admin_page', 'Admin', 'users')] %}{% endif %}
+                <ul>
+                {% for endpoint, label, ic in nav %}
+                    <li><a class="nav-link" href="{{ url_for(endpoint) }}" {% if request.endpoint == endpoint %}aria-current="page"{% endif %}>{{ icon(ic) }}<span>{{ _(label) }}</span></a></li>
+                {% endfor %}
+                </ul>
+            </nav>
+            <div class="sidebar-foot">
+                {% if request.endpoint != 'auth.account_page' %}
+                <div class="usage" data-usage>
+                    <div class="progress" role="progressbar" aria-label="{{ _('Storage used') }}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+                    <p class="usage-text muted"></p>
+                </div>
+                {% endif %}
+                <p class="muted status-line">{{ icon("shield" if current_user.is_admin else "lock", "icon-sm") }}<span dir="auto">{{ current_user.username }}</span></p>
+                {{ prefs() }}
+                <button type="button" class="nav-link" data-action="logout">{{ icon("logout", "icon-flip") }}<span>{{ _("Log out") }}</span></button>
+            </div>
+        </div>
+    </div>
+    <main id="main" class="content" tabindex="-1">
+        {% block content %}{% endblock %}
+    </main>
+</div>
+{% else %}
+<div class="page-center">
+    <main id="main" class="auth-wrap" tabindex="-1">
+        {{ self.content() }}
+    </main>
+    <footer class="auth-foot">{{ prefs() }}</footer>
+</div>
 {% endif %}
-<main id="main" class="container" tabindex="-1">
-    {% block content %}{% endblock %}
-</main>
-<div class="toasts" id="toasts" role="status" aria-live="polite"></div>
-<dialog id="confirm-dialog" class="dialog" aria-labelledby="confirm-title">
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<dialog id="confirm-dialog" class="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-message">
     <form method="dialog">
         <h2 id="confirm-title" class="dialog-title"></h2>
         <p id="confirm-message"></p>
         <div class="dialog-actions">
-            <button type="button" value="cancel" class="btn">Cancel</button>
-            <button value="ok" class="btn btn-primary" id="confirm-ok">OK</button>
+            <button type="button" value="cancel" class="btn">{{ _("Cancel") }}</button>
+            <button value="ok" class="btn btn-primary" id="confirm-ok">{{ _("OK") }}</button>
         </div>
     </form>
 </dialog>
@@ -48,12 +87,12 @@
         <h2 id="prompt-title" class="dialog-title"></h2>
         <div class="field">
             <label for="prompt-input" id="prompt-label"></label>
-            <input id="prompt-input" autocomplete="off">
+            <input id="prompt-input" autocomplete="off" dir="auto">
             <select id="prompt-select" hidden></select>
         </div>
         <div class="dialog-actions">
-            <button type="button" value="cancel" class="btn">Cancel</button>
-            <button value="ok" class="btn btn-primary" id="prompt-ok">OK</button>
+            <button type="button" value="cancel" class="btn">{{ _("Cancel") }}</button>
+            <button value="ok" class="btn btn-primary" id="prompt-ok">{{ _("OK") }}</button>
         </div>
     </form>
 </dialog>
