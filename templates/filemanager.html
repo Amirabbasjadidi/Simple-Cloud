@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Manager</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='FM.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='Header.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='cloud.png') }}" type="image/png">
+
+</head>
+<body>
+    <header class="header-transparent">
+        <nav class="header-nav-container">
+            <h1 class="header-logo">Simple Cloud</h1>
+            <div class="hamburger-menu" id="hamburger-menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="header-nav-buttons" id="header-nav-buttons">
+                <button id="upload-file-btn">Upload File</button>
+                <button id="nav-Fetch-btn">Fetch URL</button>
+                <button id="filemanager-btn">File Manager</button>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="file-manager-container">
+        <div id="file-manager" class="files-grid"></div>
+        <div class="pagination">
+            <button id="prev-btn" disabled>&lt; Prev</button>
+            <span id="page-info">Page 1</span>
+            <button id="next-btn">Next &gt;</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='FM.js') }}"></script>
+</body>
+</html>

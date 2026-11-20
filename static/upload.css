@@ -1,0 +1,163 @@
+@font-face {
+    font-family: 'Ubuntu';
+    src: url('Ubuntu.ttf') format('truetype');
+}
+
+body {
+    font-family: 'Ubuntu', sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    margin: 0;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+}
+
+.upload-container {
+    background: #ffffff;
+    border-radius: 10px;
+    box-shadow: 0 8px 15px rgba(0, 0, 0, 0.1);
+    padding: 30px;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+}
+
+h1 {
+    margin-bottom: 20px;
+    font-size: 26px;
+    color: #333333;
+}
+
+.drop-zone {
+    border: 2px dashed #ccc;
+    border-radius: 10px;
+    padding: 20px;
+    cursor: pointer;
+    transition: border-color 0.3s;
+}
+
+.drop-zone:hover {
+    border-color: #6a11cb;
+}
+
+.drop-zone p {
+    margin: 0;
+    color: #555;
+    font-size: 16px;
+}
+
+button {
+    width: 100%;
+    padding: 12px;
+    background: #4CAF50;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+    margin-top: 20px;
+    font-family: 'Ubuntu', sans-serif;
+}
+
+button:hover {
+    background: #45a049;
+}
+
+button:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+}
+
+#file-name {
+    margin-top: 10px;
+    font-size: 14px;
+    color: #555;
+}
+
+.popup {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    justify-content: center;
+    align-items: center;
+}
+
+.popup-content {
+    background: #ffffff;
+    padding: 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+}
+
+.popup-content h2 {
+    margin-bottom: 20px;
+    color: #333;
+}
+
+.progress-bar {
+    margin: 10px 0;
+    width: 100%;
+    text-align: left;
+}
+
+.progress-label {
+    font-size: 14px;
+    color: #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    display: block;
+}
+
+.progress {
+    background: #f0f0f0;
+    border-radius: 5px;
+    overflow: hidden;
+    height: 20px;
+    margin-top: 5px;
+    position: relative;
+}
+
+.progress-inner {
+    background: #6a11cb;
+    height: 100%;
+    width: 0%;
+    transition: width 0.3s ease;
+}
+
+#close-popup-btn {
+    margin-top: 20px;
+    padding: 10px 20px;
+    background: #ff4b5c;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+#close-popup-btn:hover {
+    background: #e04350;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .upload-container {
+        margin: 0 5px;
+        box-sizing: border-box;
+    }
+    .popup-content {
+        margin: 0 5px;
+        box-sizing: border-box;
+    }
+}

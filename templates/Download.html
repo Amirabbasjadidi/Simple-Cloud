@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Download Files</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='Header.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='download.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='cloud.png') }}" type="image/png">
+
+</head>
+<body>
+    <header class="header-transparent">
+        <nav class="header-nav-container">
+            <h1 class="header-logo">Simple Cloud</h1>
+            <div class="hamburger-menu" id="hamburger-menu">
+                <span></span>
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="header-nav-buttons" id="header-nav-buttons">
+                <button id="nav-upload-btn">Upload File</button>
+                <button id="nav-Fetch-btn">Fetch URL</button>
+                <button id="nav-filemanager-btn">File Manager</button>
+                <button id="nav-logout-btn">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="download-container">
+        <h1>Fetch Files from URLs</h1>
+        <textarea id="url-list-input" class="url-input" placeholder="Enter URLs separated by commas (e.g., https://example.com/file1.png, https://example.com/file1.png)" rows="5"></textarea>
+        <button id="fetch-btn" class="action-btn">Fetch Files</button>
+        <button id="progress-btn" class="action-btn" disabled>View Progress</button>
+    </div>
+
+    <div id="download-progress-popup" class="popup">
+        <div class="popup-content">
+            <h2>Download Progress</h2>
+            <div id="download-progress-container"></div>
+            <button id="popup-close-btn" class="close-btn">Close</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='download.js') }}"></script>
+</body>
+</html>

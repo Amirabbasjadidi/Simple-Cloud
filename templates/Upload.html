@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Upload File</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='upload.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='Header.css') }}">
+    <link rel="icon" href="{{ url_for('static', filename='cloud.png') }}" type="image/png">
+</head>
+<body>
+    <header class="header-transparent">
+        <nav class="header-nav-container">
+            <h1 class="header-logo">Simple Cloud</h1>
+            <div class="hamburger-menu" id="hamburger-menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+            <div class="header-nav-buttons" id="header-nav-buttons">
+                <button id="upload-file-btn">Upload File</button>
+                <button id="nav-Fetch-btn">Fetch URL</button>
+                <button id="filemanager-btn">File Manager</button>
+                <button id="logout-btn">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <div class="upload-container">
+        <h1>Upload Your File</h1>
+        <div class="drop-zone" id="drop-zone">
+            <p>Drag and drop your file here or click to upload</p>
+            <input type="file" id="file-input" multiple hidden>
+        </div>
+        <button id="upload-btn" disabled>Upload File</button>
+        <button id="show-progress-btn" disabled>Show Upload Progress</button>
+        <p id="file-name"></p>
+    </div>
+
+    <div id="progress-popup" class="popup">
+        <div class="popup-content">
+            <h2>Upload Progress</h2>
+            <div id="progress-container"></div>
+            <button id="close-popup-btn">Close</button>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='upload.js') }}"></script>
+</body>
+</html>

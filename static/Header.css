@@ -1,0 +1,131 @@
+@font-face {
+    font-family: 'Ubuntu';
+    src: url('Ubuntu.ttf') format('truetype');
+}
+
+body {
+    font-family: 'Ubuntu', sans-serif;
+    margin: 0;
+    padding: 0;
+    background: linear-gradient(135deg, #6a11cb 0%, #2575fc 100%);
+    color: #fff;
+}
+
+.header-transparent {
+    position: fixed;
+    top: 0;
+    width: 100%;
+    background: rgba(255, 255, 255, 0.3);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+    z-index: 1000;
+}
+
+.header-nav-container {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 10px 20px;
+}
+
+.header-logo {
+    font-size: 24px;
+    font-weight: bold;
+    color: #333;
+}
+
+.header-nav-buttons {
+    display: flex;
+    gap: 10px;
+}
+
+.header-nav-buttons button {
+    flex: 1;
+    min-width: 150px;
+    padding: 10px 20px;
+    margin: 0;
+    font-size: 14px;
+    color: #fff;
+    background: #4CAF50;
+    border: none;
+    border-radius: 5px;
+    cursor: pointer;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.3s ease;
+}
+
+.header-nav-buttons button:hover {
+    background: #45a049;
+}
+.hamburger-menu {
+    display: none;
+    flex-direction: column;
+    justify-content: space-between;
+    width: 30px;
+    height: 20px;
+    cursor: pointer;
+    z-index: 1100;
+}
+
+.hamburger-menu span {
+    display: block;
+    height: 3px;
+    background-color: #333;
+    border-radius: 3px;
+    transition: 0.3s ease;
+}
+
+.hamburger-menu.active span:nth-child(1) {
+    transform: rotate(45deg) translate(5px, 5px);
+}
+
+.hamburger-menu.active span:nth-child(2) {
+    opacity: 0;
+}
+
+.hamburger-menu.active span:nth-child(3) {
+    transform: rotate(-45deg) translate(5px, -5px);
+}
+
+.header-nav-buttons {
+    display: flex;
+    gap: 10px;
+    transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+.header-nav-buttons.hidden {
+    display: none;
+}
+
+@media (hover: none) and (pointer: coarse) {
+    .hamburger-menu {
+        display: flex;
+    }
+
+    .header-nav-buttons {
+        flex-direction: column;
+        position: absolute;
+        top: 70px;
+        right: 10px;
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        padding: 10px;
+        border-radius: 5px;
+        transform: translateY(-50px);
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    .header-nav-buttons.active {
+        transform: translateY(0);
+        opacity: 1;
+        pointer-events: all;
+    }
+}
+
+
