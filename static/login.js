@@ -19,8 +19,12 @@ document.getElementById('login-form').addEventListener('submit', function(event)
     })
     .then(response => response.json())
     .then(data => {
-        if (data.success) {
-            window.location.href = data.redirect_url || '/upload';
+        if (data.success && data.totp_required) {
+            document.getElementById('login-form').hidden = true;
+            document.getElementById('totp-form').hidden = false;
+            document.getElementById('totp-code').focus();
+        } else if (data.success) {
+            window.location.href = data.redirect_url || '/files';
         } else {
             if (data.captcha_image) {
                 captchaImage.src = 'data:image/png;base64,' + data.captcha_image;
@@ -54,3 +58,20 @@ if (captchaImage) {
             .catch(error => console.error('Error refreshing captcha:', error));
     });
 }
+
+document.getElementById('totp-form').addEventListener('submit', function(event) {
+    event.preventDefault();
+    fetch('/login/totp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
+        body: JSON.stringify({ code: document.getElementById('totp-code').value }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) window.location.href = data.redirect_url;
+        else {
+            alert(data.error);
+            if (data.restart) window.location.reload();
+        }
+    });
+});

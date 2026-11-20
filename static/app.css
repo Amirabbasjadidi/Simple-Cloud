@@ -68,3 +68,5 @@ th, td { text-align: start; padding: 6px 8px; border-bottom: 1px solid #e6e9f0; 
 .is-expired { opacity: .6; }
 .card-narrow { max-width: 440px; margin: 10vh auto; }
 .btn-block { display: block; text-align: center; }
+.qr img { display: block; margin: 8px 0; image-rendering: pixelated; background: #fff; padding: 4px; }
+.secret { font-family: ui-monospace, monospace; letter-spacing: .05em; }

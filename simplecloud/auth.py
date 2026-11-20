@@ -1,13 +1,13 @@
 import logging
 import time
 
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 from flask_login import LoginManager, UserMixin, current_user, login_required, login_user, logout_user
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import limiter
 from .captcha import consume_captcha, new_captcha
-from . import users
+from . import totp, users
 from .db import get_db
 from .events import log_event
 
@@ -128,13 +128,52 @@ def login():
         log_event("login_failed", logging.WARNING, user=username, reason="credentials")
         return _fail("Invalid username or password.", 401)
 
-    db = get_db()
-    db.execute("DELETE FROM login_failures WHERE username = ?", (username,))
-    db.commit()
+    if row["totp_secret"]:
+        # Second step. Failures are only cleared after the code, so re-entering the password
+        # can't reset the counter for TOTP guessing.
+        session["pending_2fa"] = {"uid": row["id"], "sv": row["session_version"], "ts": time.time(),
+                                  "remember": bool(data.get("remember_me"))}
+        return jsonify(success=True, totp_required=True)
     return _complete_login(row, bool(data.get("remember_me")))
 
 
+@bp.route("/login/totp", methods=["POST"])
+@limiter.limit("30 per minute")
+def login_totp():
+    pending = session.get("pending_2fa")
+    if not pending or time.time() - pending["ts"] > 300:
+        session.pop("pending_2fa", None)
+        return jsonify(success=False, error="Your sign-in expired. Please start again.", restart=True), 400
+    db = get_db()
+    row = db.execute("SELECT * FROM users WHERE id = ? AND session_version = ? AND disabled = 0",
+                     (pending["uid"], pending["sv"])).fetchone()
+    if row is None or not row["totp_secret"]:
+        session.pop("pending_2fa", None)
+        return jsonify(success=False, error="Your sign-in expired. Please start again.", restart=True), 400
+    ip = request.remote_addr or "unknown"
+    wait = _lockout_remaining(ip, row["username"])
+    if wait:
+        session.pop("pending_2fa", None)
+        log_event("login_locked", logging.WARNING, user=row["username"], retry_after=wait)
+        return jsonify(success=False, error=f"Too many failed attempts. Try again in {wait} seconds.",
+                       restart=True), 429
+    step = totp.verify(row["totp_secret"], (request.get_json(silent=True) or {}).get("code"), row["totp_last_step"])
+    # Atomic claim of the time step: the same code can't be used twice.
+    if step is None or not db.execute("UPDATE users SET totp_last_step = ? WHERE id = ? AND totp_last_step < ?",
+                                      (step, row["id"], step)).rowcount:
+        db.commit()
+        _record_failure(ip, row["username"])
+        log_event("login_failed", logging.WARNING, user=row["username"], reason="totp")
+        return jsonify(success=False, error="Invalid code."), 401
+    db.commit()
+    session.pop("pending_2fa", None)
+    return _complete_login(row, pending["remember"])
+
+
 def _complete_login(row, remember):
+    db = get_db()
+    db.execute("DELETE FROM login_failures WHERE username = ?", (row["username"],))
+    db.commit()
     login_user(User(row), remember=remember)
     log_event("login_ok", user=row["username"])
     target = url_for("auth.account_page") if row["must_change_password"] else url_for("files.files_page")
@@ -181,4 +220,52 @@ def change_password():
     # set_password bumped session_version: re-login this session with the new version.
     login_user(User(db.execute("SELECT * FROM users WHERE id = ?", (current_user.id,)).fetchone()))
     log_event("password_changed", user=current_user.username)
+    return jsonify(success=True)
+
+
+@bp.route("/api/account/totp/setup", methods=["POST"])
+@login_required
+def totp_setup():
+    if current_user.totp_enabled:
+        return jsonify(success=False, error="Two-factor authentication is already on."), 400
+    secret = totp.new_secret()
+    db = get_db()
+    db.execute("UPDATE users SET totp_pending_secret = ? WHERE id = ?", (secret, current_user.id))
+    db.commit()
+    return jsonify(success=True, secret=secret, uri=totp.provisioning_uri(secret, current_user.username))
+
+
+@bp.route("/api/account/totp/enable", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def totp_enable():
+    db = get_db()
+    row = db.execute("SELECT totp_pending_secret FROM users WHERE id = ?", (current_user.id,)).fetchone()
+    if not row["totp_pending_secret"]:
+        return jsonify(success=False, error="Start the setup first."), 400
+    step = totp.verify(row["totp_pending_secret"], (request.get_json(silent=True) or {}).get("code"))
+    if step is None:
+        return jsonify(success=False, error="Invalid code. Check the time on your phone and try again."), 400
+    db.execute("UPDATE users SET totp_secret = totp_pending_secret, totp_pending_secret = NULL, totp_last_step = ? "
+               "WHERE id = ?", (step, current_user.id))
+    db.commit()
+    log_event("totp_enabled", user=current_user.username)
+    return jsonify(success=True)
+
+
+@bp.route("/api/account/totp/disable", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def totp_disable():
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    row = db.execute("SELECT * FROM users WHERE id = ?", (current_user.id,)).fetchone()
+    if not row["totp_secret"]:
+        return jsonify(success=False, error="Two-factor authentication is not on."), 400
+    if not check_password_hash(row["password"], str(data.get("password") or "")) or             totp.verify(row["totp_secret"], data.get("code"), row["totp_last_step"]) is None:
+        log_event("totp_disable_failed", logging.WARNING, user=current_user.username)
+        return jsonify(success=False, error="Wrong password or code."), 400
+    db.execute("UPDATE users SET totp_secret = NULL, totp_pending_secret = NULL WHERE id = ?", (current_user.id,))
+    db.commit()
+    log_event("totp_disabled", user=current_user.username)
     return jsonify(success=True)

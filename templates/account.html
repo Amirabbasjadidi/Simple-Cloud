@@ -32,8 +32,45 @@
         <button type="submit" class="btn btn-primary">Change password</button>
     </form>
 </section>
-{% block account_extra %}{% endblock %}
+<section class="card" aria-labelledby="tfa-title">
+    <h2 id="tfa-title">Two-factor authentication</h2>
+    {% if current_user.totp_enabled %}
+    <p><strong>On.</strong> Signing in requires a code from your authenticator app.</p>
+    <form id="totp-disable-form" class="form" novalidate>
+        <div class="field">
+            <label for="tfa-off-password">Password</label>
+            <input id="tfa-off-password" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+            <label for="tfa-off-code">Current code</label>
+            <input id="tfa-off-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+        </div>
+        <button type="submit" class="btn btn-danger">Turn off</button>
+    </form>
+    {% else %}
+    <p>Off. Add a second step to your sign-in with an authenticator app (for example Aegis, Google Authenticator or 1Password).</p>
+    <button type="button" class="btn btn-primary" id="totp-start">Set up</button>
+    <div id="totp-setup" hidden>
+        <ol class="steps">
+            <li>Scan this QR code with your authenticator app:
+                <div id="totp-qr" class="qr" role="img" aria-label="QR code for the authenticator app"></div>
+                <details><summary>Cannot scan? Enter this key instead</summary><code id="totp-secret" class="secret" dir="ltr"></code></details>
+            </li>
+            <li>
+                <form id="totp-enable-form" class="form" novalidate>
+                    <div class="field">
+                        <label for="tfa-code">Enter the 6-digit code shown in the app</label>
+                        <input id="tfa-code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">Turn on</button>
+                </form>
+            </li>
+        </ol>
+    </div>
+    {% endif %}
+</section>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='vendor/qrcode.js') }}"></script>
 <script src="{{ url_for('static', filename='account.js') }}"></script>
 {% endblock %}

@@ -36,6 +36,11 @@
 
             <button type="submit">Login</button>
         </form>
+        <form id="totp-form" hidden novalidate>
+            <label for="totp-code">Enter the 6-digit code from your authenticator app</label>
+            <input type="text" id="totp-code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]*" maxlength="6" required>
+            <button type="submit">Verify</button>
+        </form>
     </div>
     <script src="{{ url_for('static', filename='login.js') }}"></script>
 </body>
