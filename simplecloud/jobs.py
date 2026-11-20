@@ -21,6 +21,7 @@ from .db import connect, get_db
 from .events import log_event
 from .fetch import FetchError, fetch_to_file
 from .files import ApiError, add_file, owned_folder
+from .i18n import gettext as _
 
 bp = Blueprint("jobs", __name__)
 
@@ -176,7 +177,7 @@ def create():
     active = db.execute("SELECT COUNT(*) FROM jobs WHERE user_id = ? AND status IN ('queued', 'running')",
                         (current_user.id,)).fetchone()[0]
     if active + len(urls) > cfg["FETCH_MAX_ACTIVE_JOBS"]:
-        raise ApiError(f"At most {cfg['FETCH_MAX_ACTIVE_JOBS']} downloads can run at once.", 429)
+        raise ApiError(_("At most %(n)s downloads can run at once.", n=cfg['FETCH_MAX_ACTIVE_JOBS']), 429)
 
     executor, worker = _runtime(current_app._get_current_object())
     now = time.time()

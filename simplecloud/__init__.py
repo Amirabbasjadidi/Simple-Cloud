@@ -34,7 +34,7 @@ def create_app(overrides=None):
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-    from . import admin, auth, cli, db, files, jobs, shares, uploads
+    from . import admin, auth, cli, db, files, i18n, jobs, shares, uploads
     schema_ok = {"value": db.init_db(app)}
     if not schema_ok["value"]:
         app.logger.error("Database schema is out of date. Run `flask migrate --dry-run`, then `flask migrate`.")
@@ -58,6 +58,15 @@ def create_app(overrides=None):
     app.register_blueprint(uploads.bp)
     app.register_blueprint(jobs.bp)
     app.register_blueprint(shares.bp)
+    i18n.init_app(app)
+
+    from markupsafe import Markup, escape
+    from flask import url_for
+
+    def icon(name, cls=""):
+        href = url_for("static", filename="icons.svg") + "#" + name
+        return Markup(f'<svg class="icon {escape(cls)}" aria-hidden="true" focusable="false"><use href="{escape(href)}"/></svg>')
+    app.jinja_env.globals["icon"] = icon
     if schema_ok["value"]:
         with app.app_context():
             uploads.cleanup_abandoned(db.get_db(), app.config)
@@ -67,7 +76,7 @@ def create_app(overrides=None):
     @app.errorhandler(413)
     def too_large(_e):
         limit_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
-        return jsonify(success=False, error=f"File is too large (max {limit_mb} MB)."), 413
+        return jsonify(success=False, error=i18n.gettext("File is too large (max %(n)s MB).", n=limit_mb)), 413
 
     from .quota import QuotaError
 

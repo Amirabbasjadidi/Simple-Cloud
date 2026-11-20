@@ -10,6 +10,7 @@ from .captcha import consume_captcha, new_captcha
 from . import totp, users
 from .db import get_db
 from .events import log_event
+from .i18n import gettext as _
 
 bp = Blueprint("auth", __name__)
 login_manager = LoginManager()
@@ -56,7 +57,7 @@ def unauthorized():
 @bp.before_app_request
 def force_password_change():
     if (current_user.is_authenticated and current_user.must_change_password
-            and request.endpoint not in ("auth.account_page", "auth.change_password", "auth.logout", "static")):
+            and request.endpoint not in ("auth.account_page", "auth.change_password", "auth.logout", "i18n.set_language", "static")):
         if request.path.startswith("/api/") or request.method != "GET":
             return jsonify(success=False, error="You must change your password first.",
                            must_change_password=True), 403
@@ -113,7 +114,7 @@ def login():
     if wait:
         consume_captcha(None)  # still burn the captcha
         log_event("login_locked", logging.WARNING, user=username, retry_after=wait)
-        resp, status = _fail(f"Too many failed attempts. Try again in {wait} seconds.", 429)
+        resp, status = _fail(_("Too many failed attempts. Try again in %(n)s seconds.", n=wait), 429)
         resp.headers["Retry-After"] = str(wait)
         return resp, status
 
@@ -155,7 +156,7 @@ def login_totp():
     if wait:
         session.pop("pending_2fa", None)
         log_event("login_locked", logging.WARNING, user=row["username"], retry_after=wait)
-        return jsonify(success=False, error=f"Too many failed attempts. Try again in {wait} seconds.",
+        return jsonify(success=False, error=_("Too many failed attempts. Try again in %(n)s seconds.", n=wait),
                        restart=True), 429
     step = totp.verify(row["totp_secret"], (request.get_json(silent=True) or {}).get("code"), row["totp_last_step"])
     # Atomic claim of the time step: the same code can't be used twice.

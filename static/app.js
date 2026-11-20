@@ -3,6 +3,17 @@
 
 const SC = (() => {
   const csrf = document.querySelector('meta[name="csrf-token"]')?.content || "";
+  const lang = document.documentElement.lang || "en";
+  let dict = {};
+  try { dict = JSON.parse(document.getElementById("i18n-data")?.textContent || "{}"); } catch (_) { /* English */ }
+
+  /* Translate an English source string; {name} placeholders are filled from vars. */
+  function t(s, vars) {
+    let out = dict[s] || s;
+    if (vars) out = out.replace(/\{(\w+)\}/g, (m, k) => (k in vars ? vars[k] : m));
+    return out;
+  }
+  const num = (n, digits = 0) => Number(n).toLocaleString(lang, { maximumFractionDigits: digits });
 
   async function api(url, { method = "GET", json, body, headers = {} } = {}) {
     const opts = { method, headers: { "X-CSRFToken": csrf, ...headers }, credentials: "same-origin" };
@@ -16,7 +27,7 @@ const SC = (() => {
     let data = {};
     try { data = await r.json(); } catch (_) { /* non-JSON response */ }
     if (!r.ok || data.success === false) {
-      const err = new Error(data.error || `Request failed (HTTP ${r.status})`);
+      const err = new Error(data.error ? t(data.error) : `${t("Request failed")} (HTTP ${r.status})`);
       err.status = r.status;
       err.data = data;
       if (data.must_change_password) window.location.href = "/account";
@@ -27,23 +38,18 @@ const SC = (() => {
 
   function toast(message, type = "info", timeout = 5000) {
     const box = document.getElementById("toasts");
-    const el = document.createElement("div");
-    el.className = `toast toast-${type}`;
-    el.setAttribute("role", type === "error" ? "alert" : "status");
+    const node = document.createElement("div");
+    node.className = `toast toast-${type}`;
+    node.setAttribute("role", type === "error" ? "alert" : "status");
     const text = document.createElement("span");
     text.textContent = message;
-    const close = document.createElement("button");
-    close.type = "button";
-    close.className = "toast-close";
-    close.setAttribute("aria-label", SC.t ? SC.t("Dismiss") : "Dismiss");
-    close.textContent = "×";
-    close.addEventListener("click", () => el.remove());
-    el.append(text, close);
-    box.appendChild(el);
-    if (timeout) setTimeout(() => el.remove(), timeout);
+    const close = el("button", { type: "button", class: "toast-close", "aria-label": t("Dismiss"), onclick: () => node.remove() }, icon("x"));
+    node.append(icon(type === "error" ? "alert" : type === "success" ? "check" : "info"), text, close);
+    box.appendChild(node);
+    if (timeout) setTimeout(() => node.remove(), timeout);
   }
 
-  function confirmDialog(message, { title = "Are you sure?", confirmText = "OK", danger = false } = {}) {
+  function confirmDialog(message, { title = t("Are you sure?"), confirmText = t("OK"), danger = false } = {}) {
     const dlg = document.getElementById("confirm-dialog");
     document.getElementById("confirm-title").textContent = title;
     document.getElementById("confirm-message").textContent = message;
@@ -86,7 +92,7 @@ const SC = (() => {
   }
 
   /* Text input dialog (value) or select dialog (options: [{value, label}]). Resolves null on cancel. */
-  function promptDialog({ title, label, value = "", options = null, confirmText = "OK" }) {
+  function promptDialog({ title, label, value = "", options = null, confirmText = t("OK") }) {
     const dlg = document.getElementById("prompt-dialog");
     const input = document.getElementById("prompt-input");
     const select = document.getElementById("prompt-select");
@@ -117,7 +123,7 @@ const SC = (() => {
     const units = ["B", "KB", "MB", "GB", "TB"];
     let i = 0;
     while (n >= 1024 && i < units.length - 1) { n /= 1024; i++; }
-    return `${n.toFixed(i && n < 10 ? 1 : 0)} ${units[i]}`;
+    return `${num(n, i && n < 10 ? 1 : 0)} ${t(units[i])}`;
   }
 
   function formatDate(s) {
@@ -125,6 +131,20 @@ const SC = (() => {
     const d = new Date(s.replace(" ", "T") + (s.endsWith("Z") ? "" : "Z"));
     return d.toLocaleString(document.documentElement.lang || undefined);
   }
+
+  /* Icon from the shared sprite (static/icons.svg). */
+  function icon(name, cls = "") {
+    const NS = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("class", `icon ${cls}`.trim());
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("focusable", "false");
+    const use = document.createElementNS(NS, "use");
+    use.setAttribute("href", `${SPRITE}#${name}`);
+    svg.appendChild(use);
+    return svg;
+  }
+  const SPRITE = document.querySelector('link[rel="stylesheet"][href*="app.css"]')?.href.replace(/app\.css.*$/, "icons.svg") || "/static/icons.svg";
 
   function el(tag, attrs = {}, ...children) {
     const e = document.createElement(tag);
@@ -146,7 +166,7 @@ const SC = (() => {
       const u = await api("/api/usage");
       const used = u.used + u.reserved;
       const pct = u.quota ? Math.min(100, Math.round((used / u.quota) * 100)) : 0;
-      const T = SC.t || ((x) => x);
+      const T = t;
       for (const box of boxes) {
         const bar = box.querySelector(".progress");
         bar.setAttribute("aria-valuenow", String(pct));
@@ -154,7 +174,7 @@ const SC = (() => {
         bar.classList.toggle("progress-warn", pct >= 90);
         bar.querySelector("span").style.width = `${pct}%`;
         box.querySelector(".usage-text").textContent = u.quota
-          ? `${formatBytes(used)} ${T("of")} ${formatBytes(u.quota)} ${T("used")} (${pct}%)`
+          ? `${formatBytes(used)} ${T("of")} ${formatBytes(u.quota)} ${T("used")} (${num(pct)}%)`
           : `${formatBytes(used)} ${T("used")} · ${T("no quota")}`;
       }
     } catch (_) { /* usage is informational */ }
@@ -163,11 +183,35 @@ const SC = (() => {
   document.addEventListener("DOMContentLoaded", () => {
     refreshUsage();
     const toggle = document.querySelector(".nav-toggle");
-    const nav = document.getElementById("main-nav");
+    const nav = document.getElementById("sidebar");
     toggle?.addEventListener("click", () => {
       const open = toggle.getAttribute("aria-expanded") !== "true";
       toggle.setAttribute("aria-expanded", String(open));
       nav.classList.toggle("open", open);
+    });
+
+    // Theme toggle: the choice is remembered per browser; theme.js applies it before first paint.
+    const root = document.documentElement;
+    document.querySelectorAll('[data-action="theme"]').forEach((b) => {
+      b.setAttribute("aria-pressed", String(root.dataset.theme === "dark"));
+      b.addEventListener("click", () => {
+        const next = root.dataset.theme === "dark" ? "light" : "dark";
+        root.dataset.theme = next;
+        try { localStorage.setItem("sc.theme", next); } catch (_) { /* storage blocked */ }
+        document.querySelectorAll('[data-action="theme"]').forEach((x) => x.setAttribute("aria-pressed", String(next === "dark")));
+      });
+    });
+
+    // <details class="menu"> overflow menus: one open at a time; close on outside click or Escape.
+    document.addEventListener("click", (e) => {
+      document.querySelectorAll("details.menu[open]").forEach((d) => {
+        if (!d.contains(e.target) || e.target.closest(".menu-item")) d.open = false;
+      });
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const d = document.activeElement?.closest("details.menu[open]");
+      if (d) { d.open = false; d.querySelector("summary").focus(); }
     });
     document.querySelector('[data-action="logout"]')?.addEventListener("click", async () => {
       try {
@@ -179,5 +223,5 @@ const SC = (() => {
     });
   });
 
-  return { api, toast, confirm: confirmDialog, prompt: promptDialog, openDialog, formatBytes, formatDate, el, csrf, refreshUsage };
+  return { api, toast, confirm: confirmDialog, prompt: promptDialog, openDialog, formatBytes, formatDate, el, icon, t, num, lang, csrf, refreshUsage };
 })();

@@ -20,6 +20,7 @@ from . import quota, storage
 from .db import get_db
 from .events import log_event
 from .files import ApiError, add_file, file_json, owned_folder
+from .i18n import gettext as _
 
 bp = Blueprint("uploads", __name__)
 
@@ -61,7 +62,7 @@ def start():
     if size < 0:
         raise ApiError("Invalid file size.")
     if size > cfg["MAX_FILE_SIZE"]:
-        raise ApiError(f"File is too large (max {cfg['MAX_FILE_SIZE'] // 1024 // 1024} MB).", 413)
+        raise ApiError(_("File is too large (max %(n)s MB).", n=cfg['MAX_FILE_SIZE'] // 1024 // 1024), 413)
     name = storage.clean_name(data.get("name"))
     folder = owned_folder(db, current_user.id, data.get("folder_id"))
 

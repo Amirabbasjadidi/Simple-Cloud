@@ -3,6 +3,7 @@ from flask import current_app
 from werkzeug.security import generate_password_hash
 
 from . import storage
+from .i18n import gettext as _
 
 
 class UserError(Exception):
@@ -11,7 +12,7 @@ class UserError(Exception):
 
 def validate_password(password):
     if len(password or "") < current_app.config["MIN_PASSWORD_LENGTH"]:
-        raise UserError(f"Password must be at least {current_app.config['MIN_PASSWORD_LENGTH']} characters.")
+        raise UserError(_("Password must be at least %(n)s characters.", n=current_app.config['MIN_PASSWORD_LENGTH']))
 
 
 def create_user(db, username, password, is_admin=False, quota_bytes=None):
@@ -20,7 +21,7 @@ def create_user(db, username, password, is_admin=False, quota_bytes=None):
         raise UserError("Username must be 1-64 characters without spaces.")
     validate_password(password)
     if db.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
-        raise UserError(f"User {username!r} already exists.")
+        raise UserError(_("User %(name)s already exists.", name=repr(username)))
     if quota_bytes is None:
         quota_bytes = current_app.config["DEFAULT_QUOTA_BYTES"] or None
     cur = db.execute("INSERT INTO users (username, password, is_admin, quota_bytes) VALUES (?, ?, ?, ?)",

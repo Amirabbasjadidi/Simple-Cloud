@@ -39,6 +39,8 @@ def load_config():
         "BACKUP_FOLDER": get("BACKUP_FOLDER", os.path.join(ROOT, "backups")),
         "PORT": get_int("PORT", 8000),
         "LOG_LEVEL": get("LOG_LEVEL", "INFO").upper(),
+        # Interface language when the browser has not picked one: fa (Persian) or en.
+        "DEFAULT_LANG": get("DEFAULT_LANG", "fa"),
         # Request body limit for uploads (bytes). Default 2 GiB.
         "MAX_CONTENT_LENGTH": get_int("MAX_CONTENT_LENGTH", 2 * 1024**3),
         # Size limit of one stored file (chunked uploads and URL fetches). Default 10 GiB.
