@@ -1,0 +1,29 @@
+<dialog id="share-dialog" class="dialog" aria-labelledby="share-dialog-title">
+    <form method="dialog" id="share-form" novalidate>
+        <h2 id="share-dialog-title" class="dialog-title">Share</h2>
+        <p class="muted share-file" id="share-file" dir="auto"></p>
+        <div class="field">
+            <label for="share-expiry">Link expires</label>
+            <select id="share-expiry">
+                <option value="">Never</option>
+                <option value="1">After 1 hour</option>
+                <option value="24" selected>After 1 day</option>
+                <option value="168">After 7 days</option>
+                <option value="720">After 30 days</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="share-pass">Password (optional)</label>
+            <input id="share-pass" type="password" autocomplete="new-password">
+        </div>
+        <div class="field">
+            <label for="share-max">Download limit (optional)</label>
+            <input id="share-max" type="number" min="1" inputmode="numeric" placeholder="Unlimited">
+        </div>
+        <div class="dialog-actions">
+            <button type="button" value="cancel" class="btn">Close</button>
+            <button value="ok" class="btn btn-primary">Create link</button>
+        </div>
+        <div id="share-existing" class="share-existing"></div>
+    </form>
+</dialog>

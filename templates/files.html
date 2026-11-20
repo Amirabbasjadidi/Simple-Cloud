@@ -35,6 +35,8 @@
     <p class="state muted">Loading…</p>
 </section>
 
+{% include "_share_dialog.html" %}
+
 <dialog id="preview-dialog" class="dialog dialog-preview" aria-labelledby="preview-title">
     <form method="dialog">
         <header class="preview-head">
@@ -48,5 +50,6 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='preview.js') }}"></script>
+<script src="{{ url_for('static', filename='shares.js') }}"></script>
 <script src="{{ url_for('static', filename='files.js') }}"></script>
 {% endblock %}

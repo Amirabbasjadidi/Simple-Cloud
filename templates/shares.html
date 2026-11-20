@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Shared links{% endblock %}
+{% block content %}
+<h1>Shared links</h1>
+<ul id="shares-list" class="share-list card" role="list" aria-live="polite"><li class="muted">Loading…</li></ul>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='shares.js') }}"></script>
+{% endblock %}
