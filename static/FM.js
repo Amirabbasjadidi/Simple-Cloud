@@ -1,3 +1,4 @@
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 document.addEventListener("DOMContentLoaded", () => {
   const fileManagerContainer = document.querySelector(".files-grid");
   const paginationContainer = document.querySelector(".pagination");
@@ -20,7 +21,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     if (isVideoFile) {
       const videoElement = document.createElement("video");
-      videoElement.src = file.path;
+      videoElement.src = file.preview_url;
       videoElement.classList.add("thumbnail");
       videoElement.muted = true;
 
@@ -51,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
       fileElement.appendChild(icon);
     } else if (isImageFile) {
       const imgElement = document.createElement("img");
-      imgElement.src = file.path;
+      imgElement.src = file.preview_url;
       imgElement.alt = file.name;
       imgElement.classList.add("thumbnail");
       fileElement.appendChild(imgElement);
@@ -83,7 +84,7 @@ document.addEventListener("DOMContentLoaded", () => {
     fileElement.appendChild(fileName);
 
     const downloadButton = document.createElement("a");
-    downloadButton.href = file.path;
+    downloadButton.href = file.download_url;
     downloadButton.download = file.name;
     downloadButton.textContent = "Download";
     downloadButton.classList.add("download-button");
@@ -95,7 +96,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ViewButton.disabled = !(isVideoFile || isAudioFile || isImageFile);
     ViewButton.addEventListener("click", () => {
       if (isVideoFile || isAudioFile || isImageFile) {
-        window.open(file.path, "_blank");
+        window.open(file.preview_url, "_blank");
       }
     });
     fileElement.appendChild(ViewButton);
@@ -174,6 +175,7 @@ document.addEventListener("DOMContentLoaded", () => {
     try {
       const response = await fetch(`/api/files/${fileId}`, {
         method: "DELETE",
+        headers: { "X-CSRFToken": csrfToken },
       });
 
       if (!response.ok) {
@@ -198,9 +200,10 @@ document.addEventListener("DOMContentLoaded", () => {
     window.location.href = "/files";
   });
 
-  document.getElementById("logout-btn").addEventListener("click", () => {
-    window.location.href = "/logout";
-  });
+  document.getElementById('logout-btn').addEventListener('click', async () => {
+    const r = await fetch('/logout', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+    window.location.href = r.ok ? (await r.json()).redirect_url : '/login';
+});
   document.getElementById('nav-Fetch-btn').addEventListener('click', () => {
     window.location.href = '/download';
 });

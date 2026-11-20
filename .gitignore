@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+database.db
+database.db-wal
+database.db-shm
+uploads/
+backups/
+dev-data/
+.claude/launch.json

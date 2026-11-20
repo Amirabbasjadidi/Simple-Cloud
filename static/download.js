@@ -1,3 +1,4 @@
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 const urlInput = document.getElementById("url-list-input");
 const fetchBtn = document.getElementById("fetch-btn");
 const progressBtn = document.getElementById("progress-btn");
@@ -65,6 +66,7 @@ function downloadFile(url, progressBar) {
 
         xhr.open("POST", "/download");
         xhr.setRequestHeader("Content-Type", "application/json");
+        xhr.setRequestHeader("X-CSRFToken", csrfToken);
 
         xhr.onloadstart = () => {
             progressBar.querySelector(".progress-inner").style.width = "0%";
@@ -169,8 +171,9 @@ document.getElementById('nav-filemanager-btn').addEventListener('click', () => {
     window.location.href = '/files';
 });
 
-document.getElementById('nav-logout-btn').addEventListener('click', () => {
-    window.location.href = '/logout';
+document.getElementById('nav-logout-btn').addEventListener('click', async () => {
+    const r = await fetch('/logout', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+    window.location.href = r.ok ? (await r.json()).redirect_url : '/login';
 });
 document.getElementById('nav-Fetch-btn').addEventListener('click', () => {
     window.location.href = '/download';

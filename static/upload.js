@@ -1,3 +1,4 @@
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 const dropZone = document.getElementById("drop-zone");
 const fileInput = document.getElementById("file-input");
 const uploadBtn = document.getElementById("upload-btn");
@@ -104,21 +105,23 @@ function uploadFileWithRealProgress(file, progressBar) {
                         }, 3000);
                         resolve();
                     } else {
-                        console.error("Server error:", response.error);
+                        console.error("Server error:", response.error); progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
                     }
                 } catch (error) {
-                    console.error("Invalid JSON response");
+                    console.error("Invalid JSON response"); progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
                 }
             } else {
                 console.error("Upload failed for file:", file.name);
+                try { alert(JSON.parse(xhr.responseText).error); } catch (e) {} progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
             }
         };
 
         xhr.onerror = () => {
-            console.error("Error occurred during upload:", file.name);
+            console.error("Error occurred during upload:", file.name); progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
         };
 
         xhr.open("POST", "/upload");
+        xhr.setRequestHeader("X-CSRFToken", csrfToken);
         xhr.send(formData);
     });
 }
@@ -155,8 +158,9 @@ document.getElementById('upload-file-btn').addEventListener('click', () => {
 document.getElementById('filemanager-btn').addEventListener('click', () => {
     window.location.href = '/files';
 });
-document.getElementById('logout-btn').addEventListener('click', () => {
-    window.location.href = '/logout';
+document.getElementById('logout-btn').addEventListener('click', async () => {
+    const r = await fetch('/logout', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
+    window.location.href = r.ok ? (await r.json()).redirect_url : '/login';
 });
 document.getElementById('nav-Fetch-btn').addEventListener('click', () => {
     window.location.href = '/download';

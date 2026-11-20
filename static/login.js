@@ -1,3 +1,4 @@
+const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
 document.getElementById('login-form').addEventListener('submit', function(event) {
     event.preventDefault();
 
@@ -13,7 +14,7 @@ document.getElementById('login-form').addEventListener('submit', function(event)
 
     fetch('/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrfToken },
         body: JSON.stringify({ username, password, remember_me: rememberMe, captcha }),
     })
     .then(response => response.json())
@@ -21,6 +22,10 @@ document.getElementById('login-form').addEventListener('submit', function(event)
         if (data.success) {
             window.location.href = data.redirect_url || '/upload';
         } else {
+            if (data.captcha_image) {
+                captchaImage.src = 'data:image/png;base64,' + data.captcha_image;
+                document.getElementById('captcha').value = '';
+            }
             alert(data.error || 'Invalid login credentials.');
         }
     })
