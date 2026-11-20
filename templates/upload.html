@@ -1,51 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Upload File</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='upload.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='Header.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='cloud.png') }}" type="image/png">
-</head>
-<body>
-    <header class="header-transparent">
-        <nav class="header-nav-container">
-            <h1 class="header-logo">Simple Cloud</h1>
-            <div class="hamburger-menu" id="hamburger-menu">
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-            <div class="header-nav-buttons" id="header-nav-buttons">
-                <button id="upload-file-btn">Upload File</button>
-                <button id="nav-Fetch-btn">Fetch URL</button>
-                <button id="filemanager-btn">File Manager</button>
-                <button id="logout-btn">Logout</button>
-            </div>
-        </nav>
-    </header>
+{% extends "base.html" %}
+{% block title %}Upload{% endblock %}
+{% block content %}
+<h1>Upload files</h1>
+<p class="muted" id="upload-target">Uploading to <a href="{{ url_for('files.files_page') }}" id="target-link">My files</a></p>
 
-    <div class="upload-container">
-        <h1>Upload Your File</h1>
-        <div class="drop-zone" id="drop-zone">
-            <p>Drag and drop your file here or click to upload</p>
-            <input type="file" id="file-input" multiple hidden>
-        </div>
-        <button id="upload-btn" disabled>Upload File</button>
-        <button id="show-progress-btn" disabled>Show Upload Progress</button>
-        <p id="file-name"></p>
-    </div>
+<div class="dropzone" id="dropzone">
+    <svg class="icon icon-xl" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+    <p>Drag and drop files here</p>
+    <label class="btn btn-primary" for="file-input">Choose files</label>
+    <input type="file" id="file-input" multiple class="sr-only">
+    <p class="hint">Large uploads continue where they stopped if the connection drops or you select the same file again.</p>
+</div>
 
-    <div id="progress-popup" class="popup">
-        <div class="popup-content">
-            <h2>Upload Progress</h2>
-            <div id="progress-container"></div>
-            <button id="close-popup-btn">Close</button>
-        </div>
-    </div>
-
-    <script src="{{ url_for('static', filename='upload.js') }}"></script>
-</body>
-</html>
+<section aria-labelledby="queue-title" class="queue-section">
+    <h2 id="queue-title" class="sr-only">Upload queue</h2>
+    <ul id="queue" class="queue" role="list"></ul>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='upload.js') }}"></script>
+{% endblock %}

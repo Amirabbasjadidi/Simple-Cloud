@@ -1,176 +1,179 @@
-const csrfToken = document.querySelector('meta[name="csrf-token"]').content;
-const dropZone = document.getElementById("drop-zone");
-const fileInput = document.getElementById("file-input");
-const uploadBtn = document.getElementById("upload-btn");
-const showProgressBtn = document.getElementById("show-progress-btn");
-const progressPopup = document.getElementById("progress-popup");
-const closePopupBtn = document.getElementById("close-popup-btn");
-const progressContainer = document.getElementById("progress-container");
+"use strict";
 
-let filesToUpload = [];
-let isUploading = false;
+/* Multi-file, drag-and-drop, chunked + resumable upload with per-file progress. */
+(() => {
+  const { api, toast, el, formatBytes } = SC;
+  const T = (s) => (SC.t ? SC.t(s) : s);
+  const PARALLEL = 2;
+  const RETRIES = 5;
+  const folder = new URLSearchParams(location.search).get("folder");
+  const queueEl = document.getElementById("queue");
+  const dropzone = document.getElementById("dropzone");
+  const input = document.getElementById("file-input");
+  const queue = [];
+  let active = 0;
 
-dropZone.addEventListener("click", () => fileInput.click());
-fileInput.addEventListener("change", (e) => {
-    filesToUpload = Array.from(e.target.files);
-    updateFileNameDisplay();
-    uploadBtn.disabled = filesToUpload.length === 0;
-});
+  if (folder) {
+    api("/api/files?folder=" + encodeURIComponent(folder)).then((d) => {
+      const link = document.getElementById("target-link");
+      link.textContent = d.breadcrumbs.map((c) => c.name).join(" / ") || T("My files");
+      link.href = "/files?folder=" + encodeURIComponent(folder);
+    }).catch(() => {});
+  }
 
-dropZone.addEventListener("dragover", (e) => {
-    e.preventDefault();
-    dropZone.classList.add("dragover");
-});
+  const keyFor = (f) => `sc.upload:${folder || ""}:${f.name}:${f.size}:${f.lastModified}`;
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } },
+    del(k) { try { localStorage.removeItem(k); } catch (_) { /* private mode */ } },
+  };
 
-dropZone.addEventListener("dragleave", () => dropZone.classList.remove("dragover"));
-dropZone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    dropZone.classList.remove("dragover");
-    filesToUpload = Array.from(e.dataTransfer.files);
-    updateFileNameDisplay();
-    uploadBtn.disabled = filesToUpload.length === 0;
-});
-
-function updateFileNameDisplay() {
-    const fileNameDisplay = document.getElementById("file-name");
-    if (filesToUpload.length > 0) {
-        fileNameDisplay.textContent = `${filesToUpload.length} files selected`;
-    } else {
-        fileNameDisplay.textContent = "";
+  function addFiles(files) {
+    for (const file of files) {
+      const bar = el("div", { class: "progress", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100,
+        "aria-valuenow": 0, "aria-label": `${T("Upload progress")}: ${file.name}` }, el("span"));
+      const status = el("span", { class: "queue-status muted", text: T("Waiting…") });
+      const cancelBtn = el("button", { type: "button", class: "btn btn-sm", text: T("Cancel"),
+        "aria-label": `${T("Cancel")}: ${file.name}` });
+      const item = { file, bar, status, cancelBtn, cancelled: false, xhr: null, uploadId: null };
+      cancelBtn.addEventListener("click", () => cancel(item));
+      queueEl.append(el("li", { class: "queue-item" },
+        el("div", { class: "queue-head" },
+          el("span", { class: "queue-name", title: file.name, text: file.name }),
+          el("span", { class: "muted", text: formatBytes(file.size) }), cancelBtn),
+        bar, status));
+      queue.push(item);
     }
-}
+    pump();
+  }
 
-uploadBtn.addEventListener("click", () => {
-    if (filesToUpload.length > 0 && !isUploading) {
-        isUploading = true;
-        uploadFiles();
-        showProgressBtn.disabled = false;
+  function pump() {
+    while (active < PARALLEL && queue.length) {
+      const item = queue.shift();
+      if (item.cancelled) continue;
+      active++;
+      upload(item).finally(() => { active--; pump(); });
     }
-});
+  }
 
-showProgressBtn.addEventListener("click", () => {
-    progressPopup.style.display = "flex";
-});
+  function setProgress(item, done) {
+    const pct = item.file.size ? Math.floor((done / item.file.size) * 100) : 100;
+    item.bar.querySelector("span").style.width = `${pct}%`;
+    item.bar.setAttribute("aria-valuenow", String(pct));
+    item.status.textContent = `${pct}% · ${formatBytes(done)} / ${formatBytes(item.file.size)}`;
+  }
 
-closePopupBtn.addEventListener("click", () => {
-    progressPopup.style.display = "none";
-});
-
-async function uploadFiles() {
-    for (let i = 0; i < filesToUpload.length; i += 3) {
-        const batch = filesToUpload.slice(i, i + 3);
-        const progressBars = batch.map(createProgressBar);
-
-        for (let j = 0; j < batch.length; j++) {
-            const file = batch[j];
-
-            // await new Promise((delay) => setTimeout(delay, 500));
-            await uploadFileWithRealProgress(file, progressBars[j]);
+  function sendChunk(item, offset, blob) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      item.xhr = xhr;
+      xhr.open("PUT", `/api/uploads/${encodeURIComponent(item.uploadId)}?offset=${offset}`);
+      xhr.setRequestHeader("X-CSRFToken", SC.csrf);
+      xhr.setRequestHeader("Content-Type", "application/octet-stream");
+      xhr.upload.onprogress = (e) => setProgress(item, offset + e.loaded);
+      xhr.onload = () => {
+        let data = {};
+        try { data = JSON.parse(xhr.responseText); } catch (_) { /* not JSON */ }
+        if (xhr.status === 200) resolve(data);
+        else {
+          const err = new Error(data.error || `HTTP ${xhr.status}`);
+          err.status = xhr.status;
+          err.data = data;
+          reject(err);
         }
-    }
-    isUploading = false;
-    showProgressBtn.disabled = true;
-}
-
-function checkAllUploadsCompleted() {
-    if (progressContainer.children.length === 0) {
-        showProgressBtn.disabled = true;
-    }
-}
-
-function uploadFileWithRealProgress(file, progressBar) {
-    return new Promise((resolve) => {
-        const xhr = new XMLHttpRequest();
-        const formData = new FormData();
-
-        formData.append("file", file);
-
-        xhr.upload.addEventListener("progress", (e) => {
-            if (e.lengthComputable) {
-                const percentComplete = Math.round((e.loaded / e.total) * 100);
-                progressBar.querySelector(".progress-inner").style.width = `${percentComplete}%`;
-            }
-        });
-
-        xhr.onload = () => {
-            if (xhr.status === 200) {
-                try {
-                    const response = JSON.parse(xhr.responseText);
-                    if (response.success) {
-                        progressBar.querySelector(".progress-inner").style.width = "100%";
-                        progressBar.querySelector(".progress-inner").style.backgroundColor = "#4CAF50";
-                        setTimeout(() => {
-                            progressBar.remove();
-                            checkAllUploadsCompleted();
-                        }, 3000);
-                        resolve();
-                    } else {
-                        console.error("Server error:", response.error); progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
-                    }
-                } catch (error) {
-                    console.error("Invalid JSON response"); progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
-                }
-            } else {
-                console.error("Upload failed for file:", file.name);
-                try { alert(JSON.parse(xhr.responseText).error); } catch (e) {} progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
-            }
-        };
-
-        xhr.onerror = () => {
-            console.error("Error occurred during upload:", file.name); progressBar.querySelector(".progress-inner").style.backgroundColor = "#e53935"; resolve();
-        };
-
-        xhr.open("POST", "/upload");
-        xhr.setRequestHeader("X-CSRFToken", csrfToken);
-        xhr.send(formData);
+      };
+      xhr.onerror = () => reject(Object.assign(new Error(T("Network error")), { retry: true }));
+      xhr.onabort = () => reject(Object.assign(new Error(T("Cancelled")), { cancelled: true }));
+      xhr.send(blob);
     });
-}
+  }
 
+  async function upload(item) {
+    const { file } = item;
+    const key = keyFor(file);
+    try {
+      let received = 0;
+      let chunkSize = 8 * 1024 * 1024;
+      const saved = store.get(key);
+      if (saved) {
+        try {
+          const s = await api(`/api/uploads/${encodeURIComponent(saved)}`);
+          if (s.size === file.size) { item.uploadId = saved; received = s.received; }
+        } catch (_) { store.del(key); }
+      }
+      if (!item.uploadId) {
+        const r = await api("/api/uploads", { method: "POST", json: { name: file.name, size: file.size, folder_id: folder } });
+        item.uploadId = r.upload_id;
+        chunkSize = r.chunk_size;
+        if (r.file) { done(item, key, r.file); return; }
+        store.set(key, item.uploadId);
+      } else if (received) {
+        toast(`${T("Resuming")} ${file.name}`, "info", 3000);
+      }
+      setProgress(item, received);
+      let failures = 0;
+      while (received < file.size) {
+        if (item.cancelled) return;
+        const end = Math.min(received + chunkSize, file.size);
+        try {
+          const r = await sendChunk(item, received, file.slice(received, end));
+          received = r.received;
+          failures = 0;
+          if (r.file) { done(item, key, r.file); return; }
+        } catch (e) {
+          if (e.cancelled || item.cancelled) return;
+          if (e.status === 409 && e.data && typeof e.data.received === "number") { received = e.data.received; continue; }
+          if ((e.retry || e.status >= 500) && e.status !== 507 && ++failures <= RETRIES) {
+            item.status.textContent = `${T("Connection problem, retrying…")} (${failures}/${RETRIES})`;
+            await new Promise((r) => setTimeout(r, 1000 * 2 ** failures));
+            continue;
+          }
+          throw e;
+        }
+      }
+    } catch (e) {
+      if (e.status === 404) store.del(key);
+      item.status.textContent = `${T("Failed")}: ${e.message}`;
+      item.status.className = "queue-status error";
+      item.bar.classList.add("progress-error");
+      item.cancelBtn.hidden = true;
+      toast(`${file.name}: ${e.message}`, "error");
+    }
+  }
 
-function createProgressBar(file) {
-    const progressBar = document.createElement("div");
-    progressBar.className = "progress-bar";
+  function done(item, key, f) {
+    store.del(key);
+    setProgress(item, item.file.size);
+    item.bar.classList.add("progress-done");
+    item.status.textContent = `${T("Uploaded")}${f.name !== item.file.name ? ` ${T("as")} “${f.name}”` : ""}`;
+    item.cancelBtn.hidden = true;
+    SC.refreshUsage();
+  }
 
-    const label = document.createElement("div");
-    label.className = "progress-label";
-    label.textContent = file.name;
-    label.title = file.name;
+  async function cancel(item) {
+    item.cancelled = true;
+    item.xhr?.abort();
+    item.cancelBtn.hidden = true;
+    item.status.textContent = T("Cancelled");
+    store.del(keyFor(item.file));
+    if (item.uploadId) {
+      try { await api(`/api/uploads/${encodeURIComponent(item.uploadId)}`, { method: "DELETE" }); } catch (_) { /* gone */ }
+    }
+  }
 
-    const progress = document.createElement("div");
-    progress.className = "progress";
-
-    const progressInner = document.createElement("div");
-    progressInner.className = "progress-inner";
-
-    progress.appendChild(progressInner);
-    progressBar.appendChild(label);
-    progressBar.appendChild(progress);
-
-    progressContainer.appendChild(progressBar);
-
-    return progressBar;
-}
-
-document.getElementById('upload-file-btn').addEventListener('click', () => {
-    window.location.href = '/upload';
-});
-
-document.getElementById('filemanager-btn').addEventListener('click', () => {
-    window.location.href = '/files';
-});
-document.getElementById('logout-btn').addEventListener('click', async () => {
-    const r = await fetch('/logout', { method: 'POST', headers: { 'X-CSRFToken': csrfToken } });
-    window.location.href = r.ok ? (await r.json()).redirect_url : '/login';
-});
-document.getElementById('nav-Fetch-btn').addEventListener('click', () => {
-    window.location.href = '/download';
-});
-
-
-const hamburgerMenu = document.getElementById("hamburger-menu");
-const navButtons = document.getElementById("header-nav-buttons");
-
-hamburgerMenu.addEventListener("click", () => {
-    hamburgerMenu.classList.toggle("active");
-    navButtons.classList.toggle("active");
-});
+  input.addEventListener("change", () => { addFiles([...input.files]); input.value = ""; });
+  ["dragenter", "dragover"].forEach((ev) => dropzone.addEventListener(ev, (e) => {
+    e.preventDefault();
+    dropzone.classList.add("dragover");
+  }));
+  ["dragleave", "drop"].forEach((ev) => dropzone.addEventListener(ev, () => dropzone.classList.remove("dragover")));
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    const files = [...e.dataTransfer.files];
+    if (files.length) addFiles(files);
+  });
+  // Dropping outside the zone must not navigate away from the page.
+  window.addEventListener("dragover", (e) => e.preventDefault());
+  window.addEventListener("drop", (e) => e.preventDefault());
+  window.addEventListener("beforeunload", (e) => { if (active) e.preventDefault(); });
+})();
