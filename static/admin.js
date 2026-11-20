@@ -55,20 +55,22 @@
       el("button", { class: "btn btn-sm btn-danger", type: "button", disabled: u.is_self,
         onclick: () => remove(u), text: T("Delete") }),
     );
-    const usage = `${formatBytes(u.used_bytes)} · ${u.file_count} ${T("files")}`;
+    const usage = `${formatBytes(u.used_bytes)} · ${SC.num(u.file_count)} ${T("files")}`;
+    const status = u.disabled ? ["Disabled", "badge-danger"]
+      : (u.must_change_password ? ["Must change password", "badge-warning"] : ["Active", "badge-success"]);
     return el("tr", {},
-      el("th", { scope: "row", text: u.username + (u.is_self ? ` (${T("you")})` : "") }),
-      el("td", { text: u.is_admin ? T("Admin") : T("User") }),
-      el("td", { text: u.disabled ? T("Disabled") : (u.must_change_password ? T("Must change password") : T("Active")) }),
-      el("td", { text: usage }),
-      el("td", {}, quota),
+      el("th", { scope: "row" }, el("span", { dir: "auto", text: u.username }), u.is_self ? el("span", { class: "muted", text: ` (${T("you")})` }) : null),
+      el("td", { "data-label": T("Role") }, el("span", { class: `badge ${u.is_admin ? "badge-primary" : ""}`, text: u.is_admin ? T("Admin") : T("User") })),
+      el("td", { "data-label": T("Status") }, el("span", { class: `badge ${status[1]}`, text: T(status[0]) })),
+      el("td", { "data-label": T("Usage"), text: usage }),
+      el("td", { "data-label": T("Quota (MB)") }, quota),
       el("td", {}, actions));
   }
 
   function remove(u) {
     const dlg = document.getElementById("delete-dialog");
     document.getElementById("delete-summary").textContent =
-      `${u.username}: ${u.file_count} ${T("files")}, ${formatBytes(u.used_bytes)}. ${T("This cannot be undone.")}`;
+      `${u.username}: ${SC.num(u.file_count)} ${T("files")}${SC.lang === "fa" ? "،" : ","} ${formatBytes(u.used_bytes)}. ${T("This cannot be undone.")}`;
     document.getElementById("delete-files").hidden = u.file_count === 0;
     SC.openDialog(dlg).then(async (ok) => {
       if (!ok) return;
