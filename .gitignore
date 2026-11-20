@@ -1,12 +1,19 @@
+# Python
 .venv/
+venv/
 __pycache__/
 *.pyc
 .pytest_cache/
+
+# Runtime data (never commit user data or secrets)
 database.db
 database.db-wal
 database.db-shm
+*.db
 uploads/
 backups/
 dev-data/
-.claude/launch.json
 .env
+
+# Local tooling
+.claude/
