@@ -14,6 +14,9 @@ and English**.
 - **Share links:** optional expiry, password and download limit; revocable.
 - **Accounts:** per-user storage quota, optional two-factor sign-in (TOTP authenticator apps),
   change-password page, an admin panel for users, and a command-line tool.
+- **Admin dashboard:** disk usage (cloud files, other data, free), storage per user, a warning when
+  the quotas add up to more than the disk can hold or a user is unlimited, the largest files,
+  database backups with a "Back up now" button.
 - **Security:** every user sees only their own files; math captcha and login lockout shared by all
   workers; CSRF protection; strict Content-Security-Policy; uploads stored under random names.
 - **Interface:** mobile-first, light and dark mode, keyboard and screen-reader friendly (WCAG AA
@@ -54,6 +57,9 @@ variables override them. The most useful ones:
 | `MAX_FILE_SIZE` | 10 GiB | Largest stored file (chunked uploads and URL fetches). |
 | `DEFAULT_QUOTA_BYTES` | 0 | Quota for new users; 0 = unlimited. |
 | `MIN_PASSWORD_LENGTH` | 8 | |
+| `BACKUP_KEEP` | 14 | Database backups kept (installer: `--backup-keep`). |
+| `BACKUP_MAX_AGE_HOURS`, `LOW_DISK_PERCENT` | 26, 10 | Dashboard warnings: newest database backup older than this; less free disk than this. |
+| `STATS_CACHE_SECONDS` | 60 | How long the dashboard's storage figures are cached. |
 | `SHARE_GRANT_SECONDS` | 43200 (12 h) | After a share-link download is counted, that browser or download manager may resume, retry and fetch in parallel segments for this long without using up the download limit. |
 | `LOGIN_MAX_FAILURES_USER` / `_IP`, `LOGIN_LOCKOUT_SECONDS` | 5 / 20, 900 | Login lockout. |
 | `COOKIE_SECURE` | 0 | Keep 0 on plain HTTP. Set 1 only if the site is served over HTTPS. |

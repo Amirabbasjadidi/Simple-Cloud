@@ -1,10 +1,10 @@
 import functools
 import secrets
 
-from flask import Blueprint, abort, jsonify, render_template, request
+from flask import Blueprint, abort, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
 
-from . import users
+from . import system, users
 from .db import get_db
 from .events import log_event
 
@@ -17,6 +17,17 @@ def admin_required(view):
     def wrapper(*args, **kwargs):
         if not current_user.is_admin:
             abort(404)  # don't reveal the admin area
+        return view(*args, **kwargs)
+    return wrapper
+
+
+def admin_api(view):
+    """For the dashboard APIs: a signed-in non-admin gets 403 (JSON), not the 404 of the pages."""
+    @functools.wraps(view)
+    @login_required
+    def wrapper(*args, **kwargs):
+        if not current_user.is_admin:
+            return jsonify(success=False, error="Admins only."), 403
         return view(*args, **kwargs)
     return wrapper
 
@@ -147,3 +158,37 @@ def delete_user(user_id):
     log_event("admin_delete_user", admin=current_user.username, user=user["username"],
               files=data.get("files"), count=count)
     return jsonify(success=True)
+
+
+# ---------------------------------------------------------------- system / storage dashboard
+
+@bp.route("/api/admin/system")
+@admin_api
+def system_stats():
+    cfg = current_app.config
+    data = dict(system.storage_stats(get_db(), cfg))
+    data["backups"] = system.backup_status(cfg)
+    data["backup_run"] = system.latest_run(get_db())
+    return jsonify(data)
+
+
+@bp.route("/api/admin/backup", methods=["GET"])
+@admin_api
+def backup_run_status():
+    return jsonify(run=system.latest_run(get_db()))
+
+
+@bp.route("/api/admin/backup", methods=["POST"])
+@admin_api
+def backup_now():
+    cfg = current_app.config
+    status = system.backup_status(cfg)
+    if not status["writable"]:
+        return jsonify(success=False, error="The backup folder is not writable by the Simple Cloud service.",
+                       folder=status["folder"]), 409
+    try:
+        run_id = system.start_backup(get_db(), cfg, current_user.username, current_app.logger)
+    except system.BackupBusy as busy:
+        return jsonify(success=False, error="A backup is already running.", run=busy.args[0]), 409
+    log_event("admin_backup_start", admin=current_user.username, run=run_id)
+    return jsonify(success=True, run=system.latest_run(get_db())), 202

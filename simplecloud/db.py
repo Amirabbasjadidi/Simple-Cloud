@@ -65,6 +65,16 @@ V4_TABLES = [
         expires_at REAL NOT NULL
     )""",
     "CREATE INDEX idx_share_grants_share ON share_grants(share_id, expires_at)",
+    # "Back up now" runs from the admin dashboard (one at a time across workers).
+    """CREATE TABLE backup_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        status TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        finished_at REAL,
+        started_by TEXT,
+        path TEXT,
+        error TEXT
+    )""",
 ]
 
 SCHEMA = [

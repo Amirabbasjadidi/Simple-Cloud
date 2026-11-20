@@ -239,13 +239,14 @@ def migrate_v4(conn, cfg, dry_run, echo):
     if dry_run:
         echo("v4 DB changes:")
         echo("  - new table share_grants (download grants for share links)")
+        echo("  - new table backup_runs (\"Back up now\" in the admin dashboard)")
         return
     conn.execute("BEGIN IMMEDIATE")
     for stmt in V4_TABLES:
         conn.execute(stmt)
     conn.execute("PRAGMA user_version = 4")
     conn.execute("COMMIT")
-    echo("v4: added share download grants")
+    echo("v4: added share download grants and backup runs")
 
 
 MIGRATIONS = {2: migrate_v2, 3: migrate_v3, 4: migrate_v4}

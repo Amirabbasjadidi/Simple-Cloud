@@ -40,6 +40,13 @@ def load_config():
         "BACKUP_FOLDER": backup_folder,
         # Database-only backups (`flask backup --db-only`, the nightly timer); may be another disk or a NAS.
         "DB_BACKUP_FOLDER": get("DB_BACKUP_FOLDER", backup_folder),
+        # Database backups kept by the timer and by "Back up now" (the installer stores --backup-keep here).
+        "BACKUP_KEEP": get_int("BACKUP_KEEP", 14),
+        # Admin dashboard: warn when the newest database backup is older than this, or the disk
+        # holding the uploads has less than this percentage free; stats are cached this long.
+        "BACKUP_MAX_AGE_HOURS": get_int("BACKUP_MAX_AGE_HOURS", 26),
+        "LOW_DISK_PERCENT": get_int("LOW_DISK_PERCENT", 10),
+        "STATS_CACHE_SECONDS": get_int("STATS_CACHE_SECONDS", 60),
         "PORT": get_int("PORT", 8000),
         "LOG_LEVEL": get("LOG_LEVEL", "INFO").upper(),
         # Interface language when the browser has not picked one: fa (Persian) or en.
