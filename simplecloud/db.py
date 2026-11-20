@@ -6,15 +6,75 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # Bump together with a new step in migrate.MIGRATIONS. tests/test_migration.py checks that a
 # fresh database (SCHEMA below) and a migrated legacy database end up with the same tables.
-LATEST_VERSION = 2
+LATEST_VERSION = 3
+
+# Tables added in schema v3 (shared by the fresh schema and migrate_v3).
+V3_TABLES = [
+    """CREATE TABLE uploads (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        folder_id INTEGER,
+        name TEXT NOT NULL,
+        total_size INTEGER NOT NULL,
+        received INTEGER NOT NULL DEFAULT 0,
+        stored_name TEXT NOT NULL,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    )""",
+    """CREATE TABLE jobs (
+        id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        folder_id INTEGER,
+        url TEXT NOT NULL,
+        status TEXT NOT NULL,
+        done_bytes INTEGER NOT NULL DEFAULT 0,
+        total_bytes INTEGER,
+        file_id INTEGER,
+        name TEXT,
+        error TEXT,
+        stored_name TEXT,
+        worker TEXT,
+        heartbeat REAL,
+        created_at REAL NOT NULL,
+        updated_at REAL NOT NULL
+    )""",
+    "CREATE INDEX idx_jobs_user ON jobs(user_id, created_at)",
+    """CREATE TABLE shares (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL UNIQUE,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+        created_at REAL NOT NULL,
+        expires_at REAL,
+        password_hash TEXT,
+        max_downloads INTEGER,
+        download_count INTEGER NOT NULL DEFAULT 0
+    )""",
+    "CREATE INDEX idx_shares_file ON shares(file_id)",
+]
 
 SCHEMA = [
     """CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        must_change_password INTEGER NOT NULL DEFAULT 0
+        must_change_password INTEGER NOT NULL DEFAULT 0,
+        is_admin INTEGER NOT NULL DEFAULT 0,
+        disabled INTEGER NOT NULL DEFAULT 0,
+        session_version INTEGER NOT NULL DEFAULT 0,
+        quota_bytes INTEGER,
+        totp_secret TEXT,
+        totp_pending_secret TEXT,
+        totp_last_step INTEGER NOT NULL DEFAULT 0
     )""",
+    """CREATE TABLE folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        parent_id INTEGER REFERENCES folders(id),
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )""",
+    "CREATE INDEX idx_folders_parent ON folders(user_id, parent_id)",
     """CREATE TABLE files (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL REFERENCES users(id),
@@ -22,9 +82,12 @@ SCHEMA = [
         stored_name TEXT NOT NULL UNIQUE,
         size INTEGER NOT NULL,
         mime_type TEXT NOT NULL,
-        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        folder_id INTEGER REFERENCES folders(id)
     )""",
     "CREATE INDEX idx_files_user ON files(user_id)",
+    "CREATE INDEX idx_files_folder ON files(user_id, folder_id)",
+    *V3_TABLES,
     """CREATE TABLE captchas (
         token TEXT PRIMARY KEY,
         answer INTEGER NOT NULL,
@@ -99,7 +162,7 @@ def ensure_admin(conn, logger):
     """First run only: create an admin with a random password. Flag legacy root/1234."""
     if conn.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         password = secrets.token_urlsafe(12)
-        conn.execute("INSERT INTO users (username, password, must_change_password) VALUES (?, ?, 1)",
+        conn.execute("INSERT INTO users (username, password, must_change_password, is_admin) VALUES (?, ?, 1, 1)",
                      ("admin", generate_password_hash(password)))
         print("=" * 60, flush=True)
         print(f"Initial admin created. Username: admin  Password: {password}", flush=True)

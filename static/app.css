@@ -1,0 +1,31 @@
+/* Interim shared stylesheet (Phase 4). Replaced by the design-system stylesheet in Phase 5. */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: system-ui, sans-serif; line-height: 1.5; background: #f6f7fb; color: #1b1f2a; }
+.skip-link { position: absolute; inset-inline-start: -999px; }
+.skip-link:focus { inset-inline-start: 8px; top: 8px; background: #fff; padding: 8px; z-index: 100; }
+.topbar { display: flex; align-items: center; gap: 16px; padding: 8px 16px; background: #fff; border-bottom: 1px solid #dde1ea; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 8px; font-weight: 700; color: inherit; text-decoration: none; }
+.main-nav { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+.main-nav a[aria-current="page"] { font-weight: 700; }
+.nav-toggle { display: none; }
+.container { max-width: 1100px; margin: 0 auto; padding: 16px; }
+.card { background: #fff; border: 1px solid #dde1ea; border-radius: 8px; padding: 16px; margin-block: 16px; }
+.form .field { display: flex; flex-direction: column; gap: 4px; margin-block-end: 12px; max-width: 420px; }
+input, select, textarea { font: inherit; padding: 8px; border: 1px solid #b8bfcc; border-radius: 6px; }
+.btn { font: inherit; padding: 8px 14px; border-radius: 6px; border: 1px solid #b8bfcc; background: #fff; cursor: pointer; }
+.btn-primary { background: #2453d4; border-color: #2453d4; color: #fff; }
+.btn-danger { background: #c62828; border-color: #c62828; color: #fff; }
+.btn-ghost { border-color: transparent; background: transparent; }
+.alert { padding: 12px; border-radius: 6px; background: #fff4d6; border: 1px solid #e8c25a; }
+.toasts { position: fixed; inset-block-end: 16px; inset-inline-end: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 50; }
+.toast { display: flex; gap: 12px; align-items: center; padding: 10px 14px; border-radius: 6px; background: #1b1f2a; color: #fff; }
+.toast-error { background: #c62828; } .toast-success { background: #2e7d32; }
+.toast-close { background: none; border: 0; color: inherit; font-size: 1.2em; cursor: pointer; }
+.dialog { border: 1px solid #dde1ea; border-radius: 8px; max-width: 420px; }
+.dialog-actions { display: flex; gap: 8px; justify-content: flex-end; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: start; padding: 6px 8px; border-bottom: 1px solid #e6e9f0; }
+.progress { height: 8px; background: #e6e9f0; border-radius: 4px; overflow: hidden; }
+.progress > span { display: block; height: 100%; background: #2453d4; width: 0; }
+.hint, .muted { color: #5b6475; font-size: .9em; }
+[hidden] { display: none !important; }

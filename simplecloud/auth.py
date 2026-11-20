@@ -7,6 +7,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import limiter
 from .captcha import consume_captcha, new_captcha
+from . import users
 from .db import get_db
 from .events import log_event
 
@@ -23,12 +24,43 @@ class User(UserMixin):
         self.id = row["id"]
         self.username = row["username"]
         self.must_change_password = bool(row["must_change_password"])
+        self.is_admin = bool(row["is_admin"])
+        self.session_version = row["session_version"]
+        self.quota_bytes = row["quota_bytes"]
+        self.totp_enabled = bool(row["totp_secret"])
+
+    def get_id(self):
+        # Changing the password or disabling the user bumps session_version, which invalidates
+        # every session and remember-me cookie issued before.
+        return f"{self.id}:{self.session_version}"
 
 
 @login_manager.user_loader
 def load_user(user_id):
-    row = get_db().execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
+    try:
+        uid, version = (int(x) for x in str(user_id).split(":"))
+    except ValueError:
+        return None
+    row = get_db().execute("SELECT * FROM users WHERE id = ? AND session_version = ? AND disabled = 0",
+                           (uid, version)).fetchone()
     return User(row) if row else None
+
+
+@login_manager.unauthorized_handler
+def unauthorized():
+    if request.path.startswith("/api/") or request.method != "GET":
+        return jsonify(success=False, error="Please log in."), 401
+    return redirect(url_for("auth.login", next=request.path))
+
+
+@bp.before_app_request
+def force_password_change():
+    if (current_user.is_authenticated and current_user.must_change_password
+            and request.endpoint not in ("auth.account_page", "auth.change_password", "auth.logout", "static")):
+        if request.path.startswith("/api/") or request.method != "GET":
+            return jsonify(success=False, error="You must change your password first.",
+                           must_change_password=True), 403
+        return redirect(url_for("auth.account_page"))
 
 
 def _lockout_remaining(ip, username):
@@ -68,7 +100,7 @@ def _fail(message, status, **extra):
 @limiter.limit("30 per minute", methods=["POST"])
 def login():
     if current_user.is_authenticated:
-        return redirect(url_for("files.upload_page"))
+        return redirect(url_for("files.files_page"))
     if request.method == "GET":
         return render_template("login.html", captcha_image=new_captcha())
 
@@ -91,7 +123,7 @@ def login():
         return _fail("Invalid captcha.", 400)
 
     row = get_db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
-    if not check_password_hash(row["password"] if row else _DUMMY_HASH, password) or row is None:
+    if not check_password_hash(row["password"] if row else _DUMMY_HASH, password) or row is None or row["disabled"]:
         _record_failure(ip, username)
         log_event("login_failed", logging.WARNING, user=username, reason="credentials")
         return _fail("Invalid username or password.", 401)
@@ -99,9 +131,14 @@ def login():
     db = get_db()
     db.execute("DELETE FROM login_failures WHERE username = ?", (username,))
     db.commit()
-    login_user(User(row), remember=bool(data.get("remember_me")))
-    log_event("login_ok", user=username)
-    return jsonify(success=True, redirect_url=url_for("files.upload_page"))
+    return _complete_login(row, bool(data.get("remember_me")))
+
+
+def _complete_login(row, remember):
+    login_user(User(row), remember=remember)
+    log_event("login_ok", user=row["username"])
+    target = url_for("auth.account_page") if row["must_change_password"] else url_for("files.files_page")
+    return jsonify(success=True, redirect_url=target)
 
 
 @bp.route("/refresh_captcha")
@@ -116,3 +153,32 @@ def logout():
     log_event("logout", user=current_user.username)
     logout_user()
     return jsonify(success=True, redirect_url=url_for("auth.login"))
+
+
+@bp.route("/account")
+@login_required
+def account_page():
+    return render_template("account.html")
+
+
+@bp.route("/api/account/password", methods=["POST"])
+@login_required
+@limiter.limit("10 per minute")
+def change_password():
+    data = request.get_json(silent=True) or {}
+    current, new = str(data.get("current_password") or ""), str(data.get("new_password") or "")
+    db = get_db()
+    row = db.execute("SELECT password FROM users WHERE id = ?", (current_user.id,)).fetchone()
+    if not check_password_hash(row["password"], current):
+        log_event("password_change_failed", logging.WARNING, user=current_user.username)
+        return jsonify(success=False, error="Current password is incorrect."), 400
+    if new == current:
+        return jsonify(success=False, error="The new password must be different."), 400
+    try:
+        users.set_password(db, current_user.id, new)
+    except users.UserError as e:
+        return jsonify(success=False, error=str(e)), 400
+    # set_password bumped session_version: re-login this session with the new version.
+    login_user(User(db.execute("SELECT * FROM users WHERE id = ?", (current_user.id,)).fetchone()))
+    log_event("password_changed", user=current_user.username)
+    return jsonify(success=True)

@@ -27,7 +27,7 @@ def test_old_routes_removed(two_users):
 def test_requires_login(app):
     c = app.test_client()
     assert c.get("/files/1/download").status_code == 302
-    assert c.get("/api/files").status_code == 302
+    assert c.get("/api/files").status_code == 401  # JSON APIs answer 401, pages redirect
 
 
 def test_download_is_attachment(two_users):

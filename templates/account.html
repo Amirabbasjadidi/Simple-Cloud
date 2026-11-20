@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+{% if current_user.must_change_password %}
+<div class="alert alert-warning" role="alert">You must set a new password before using Simple Cloud.</div>
+{% endif %}
+
+<section class="card" aria-labelledby="pw-title">
+    <h2 id="pw-title">Change password</h2>
+    <form id="password-form" class="form" novalidate>
+        <div class="field">
+            <label for="current-password">Current password</label>
+            <input id="current-password" type="password" autocomplete="current-password" required>
+        </div>
+        <div class="field">
+            <label for="new-password">New password</label>
+            <input id="new-password" type="password" autocomplete="new-password" required
+                   minlength="{{ config.MIN_PASSWORD_LENGTH }}" aria-describedby="pw-hint">
+            <small id="pw-hint" class="hint">At least {{ config.MIN_PASSWORD_LENGTH }} characters.</small>
+        </div>
+        <div class="field">
+            <label for="confirm-password">Repeat new password</label>
+            <input id="confirm-password" type="password" autocomplete="new-password" required>
+        </div>
+        <button type="submit" class="btn btn-primary">Change password</button>
+    </form>
+</section>
+{% block account_extra %}{% endblock %}
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='account.js') }}"></script>
+{% endblock %}

@@ -37,8 +37,9 @@ def test_captcha_answer_not_in_session_cookie(app):
     c = app.test_client()
     c.get("/login")
     with c.session_transaction() as s:
-        assert "captcha_result" not in s and set(s.keys()) >= {"captcha_token"}
-        assert str(captcha_answer(app, c)) not in str(dict(s))
+        # only an opaque token (and the CSRF token) - no answer
+        assert set(s.keys()) <= {"captcha_token", "csrf_token"} and "captcha_token" in s
+        assert captcha_answer(app, c) is not None
 
 
 def test_login_ok(app):
@@ -172,3 +173,41 @@ def test_security_headers(app):
     assert "frame-ancestors" in r.headers["Content-Security-Policy"]
     assert r.headers["X-Content-Type-Options"] == "nosniff"
     assert r.headers["Referrer-Policy"]
+
+
+def test_forced_password_change_flow(make_app, capsys):
+    import re
+    app = make_app()
+    pw = re.search(r"Password: (\S+)", capsys.readouterr().out).group(1)
+    c = app.test_client()
+    r = login(app, c, "admin", pw)
+    assert r.json["redirect_url"] == "/account"
+    assert c.get("/files").headers["Location"].endswith("/account")
+    assert c.get("/api/files").status_code == 403
+    assert c.post("/api/account/password", json={"current_password": pw, "new_password": "short"}).status_code == 400
+    assert c.post("/api/account/password", json={"current_password": "nope", "new_password": "long-enough-1"}).status_code == 400
+    r = c.post("/api/account/password", json={"current_password": pw, "new_password": "long-enough-1"})
+    assert r.json["success"]
+    assert c.get("/files").status_code == 200  # same session continues
+
+
+def test_password_change_signs_out_other_sessions(app):
+    add_user(app, "alice")
+    a, b = app.test_client(), app.test_client()
+    login(app, a, "alice")
+    login(app, b, "alice")
+    assert a.post("/api/account/password", json={"current_password": "pw-xxxxxxxx",
+                                                  "new_password": "new-password-1"}).json["success"]
+    assert a.get("/files").status_code == 200
+    assert b.get("/files").status_code == 302
+
+
+def test_disabled_user_cannot_login_and_is_signed_out(app):
+    add_user(app, "alice")
+    c = app.test_client()
+    login(app, c, "alice")
+    conn = sqlite3.connect(app.config["DATABASE"])
+    conn.execute("UPDATE users SET disabled = 1, session_version = session_version + 1 WHERE username='alice'")
+    conn.commit()
+    assert c.get("/files").status_code == 302
+    assert login(app, app.test_client(), "alice").status_code == 401

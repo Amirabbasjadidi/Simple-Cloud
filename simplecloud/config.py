@@ -41,6 +41,16 @@ def load_config():
         "LOG_LEVEL": get("LOG_LEVEL", "INFO").upper(),
         # Request body limit for uploads (bytes). Default 2 GiB.
         "MAX_CONTENT_LENGTH": get_int("MAX_CONTENT_LENGTH", 2 * 1024**3),
+        # Size limit of one stored file (chunked uploads and URL fetches). Default 10 GiB.
+        "MAX_FILE_SIZE": get_int("MAX_FILE_SIZE", 10 * 1024**3),
+        "CHUNK_SIZE": get_int("CHUNK_SIZE", 8 * 1024**2),
+        "UPLOAD_ABANDON_SECONDS": get_int("UPLOAD_ABANDON_SECONDS", 24 * 3600),
+        # Default per-user quota in bytes for new users; 0 = unlimited.
+        "DEFAULT_QUOTA_BYTES": get_int("DEFAULT_QUOTA_BYTES", 0),
+        "MIN_PASSWORD_LENGTH": get_int("MIN_PASSWORD_LENGTH", 8),
+        # Background URL fetch jobs
+        "FETCH_WORKERS": get_int("FETCH_WORKERS", 3),
+        "FETCH_MAX_ACTIVE_JOBS": get_int("FETCH_MAX_ACTIVE_JOBS", 5),
         # URL fetch limits
         "FETCH_MAX_BYTES": get_int("FETCH_MAX_BYTES", 2 * 1024**3),
         "FETCH_CONNECT_TIMEOUT": float(get("FETCH_CONNECT_TIMEOUT", 10)),

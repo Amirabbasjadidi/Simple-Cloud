@@ -8,7 +8,7 @@ import os
 import shutil
 import sqlite3
 
-from .db import LATEST_VERSION, connect, ensure_admin, schema_version, table_exists
+from .db import LATEST_VERSION, V3_TABLES, connect, ensure_admin, schema_version, table_exists
 from .storage import abs_path, guess_mime, new_stored_name
 
 
@@ -200,7 +200,42 @@ def migrate_v2(conn, cfg, dry_run, echo):
         echo(f"  skipped #{s['legacy_id']} ({s['status']}): {s['src']} - left untouched, row kept in legacy_files")
 
 
-MIGRATIONS = {2: migrate_v2}
+# ---------------------------------------------------------------- v3: Phase 4 features (pure SQL, atomic)
+
+def migrate_v3(conn, cfg, dry_run, echo):
+    if dry_run:
+        echo("v3 DB changes:")
+        echo("  - users: is_admin, disabled, session_version, quota_bytes, TOTP columns")
+        echo("  - users named 'admin' or 'root' become admins; if none, the oldest user does")
+        echo("  - files.folder_id; new tables folders, uploads, jobs, shares")
+        echo("  - existing logins are signed out once (sessions now carry a version)")
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    for coldef in ("is_admin INTEGER NOT NULL DEFAULT 0", "disabled INTEGER NOT NULL DEFAULT 0",
+                   "session_version INTEGER NOT NULL DEFAULT 0", "quota_bytes INTEGER",
+                   "totp_secret TEXT", "totp_pending_secret TEXT", "totp_last_step INTEGER NOT NULL DEFAULT 0"):
+        conn.execute(f"ALTER TABLE users ADD COLUMN {coldef}")
+    conn.execute("""CREATE TABLE folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        parent_id INTEGER REFERENCES folders(id),
+        name TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)""")
+    conn.execute("CREATE INDEX idx_folders_parent ON folders(user_id, parent_id)")
+    conn.execute("ALTER TABLE files ADD COLUMN folder_id INTEGER REFERENCES folders(id)")
+    conn.execute("CREATE INDEX idx_files_folder ON files(user_id, folder_id)")
+    for stmt in V3_TABLES:
+        conn.execute(stmt)
+    conn.execute("UPDATE users SET is_admin = 1 WHERE username IN ('admin', 'root')")
+    conn.execute("UPDATE users SET is_admin = 1 WHERE id = (SELECT MIN(id) FROM users) "
+                 "AND NOT EXISTS (SELECT 1 FROM users WHERE is_admin = 1)")
+    admins = [r[0] for r in conn.execute("SELECT username FROM users WHERE is_admin = 1")]
+    conn.execute("PRAGMA user_version = 3")
+    conn.execute("COMMIT")
+    echo(f"v3: admin role given to: {', '.join(admins) or '(no users)'}")
+
+
+MIGRATIONS = {2: migrate_v2, 3: migrate_v3}
 
 
 def run(cfg, dry_run=False, echo=print, logger=None):

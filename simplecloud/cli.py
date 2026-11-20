@@ -5,10 +5,9 @@ Passwords: --password, the SIMPLECLOUD_PASSWORD env var, or a hidden prompt (cli
 import click
 from flask import current_app
 from flask.cli import with_appcontext
-from werkzeug.security import generate_password_hash
 
 from . import migrate as migrations
-from . import storage
+from . import users
 from .db import LATEST_VERSION, get_db, schema_version
 from .events import log_event
 
@@ -35,18 +34,17 @@ password_option = click.option(
 @click.command("adduser")
 @click.option("--username", prompt=True)
 @password_option
+@click.option("--admin", is_flag=True, help="Give the user the admin role.")
+@click.option("--quota", "quota_mb", type=int, help="Storage quota in MB (default: DEFAULT_QUOTA_BYTES).")
 @with_appcontext
-def add_user(username, password):
+def add_user(username, password, admin, quota_mb):
     """Add a user."""
-    db = _db()
-    username = username.strip()
-    if not username or not password:
-        raise click.ClickException("Username and password must not be empty.")
-    if db.execute("SELECT 1 FROM users WHERE username = ?", (username,)).fetchone():
-        raise click.ClickException(f"User {username!r} already exists.")
-    db.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, generate_password_hash(password)))
-    db.commit()
-    log_event("cli_adduser", user=username)
+    try:
+        users.create_user(_db(), username, password, is_admin=admin,
+                          quota_bytes=quota_mb * 1024 * 1024 if quota_mb else None)
+    except users.UserError as e:
+        raise click.ClickException(str(e))
+    log_event("cli_adduser", user=username, admin=admin)
     click.echo(f"User {username} added.")
 
 
@@ -56,14 +54,40 @@ def add_user(username, password):
 @click.option("--force-change/--no-force-change", default=False, help="Require a change at next login.")
 @with_appcontext
 def change_password(username, password, force_change):
-    """Set a user's password."""
+    """Set a user's password (signs out their sessions)."""
     db = _db()
-    user = _user(db, username)
-    db.execute("UPDATE users SET password = ?, must_change_password = ? WHERE id = ?",
-               (generate_password_hash(password), int(force_change), user["id"]))
-    db.commit()
+    try:
+        users.set_password(db, _user(db, username)["id"], password, must_change=force_change)
+    except users.UserError as e:
+        raise click.ClickException(str(e))
     log_event("cli_changepassword", user=username)
     click.echo(f"Password for {username} updated.")
+
+
+@click.command("setadmin")
+@click.option("--username", prompt=True)
+@click.option("--admin/--no-admin", default=True)
+@with_appcontext
+def set_admin(username, admin):
+    """Grant or remove the admin role."""
+    db = _db()
+    db.execute("UPDATE users SET is_admin = ? WHERE id = ?", (int(admin), _user(db, username)["id"]))
+    db.commit()
+    log_event("cli_setadmin", user=username, admin=admin)
+    click.echo(f"{username} is {'now' if admin else 'no longer'} an admin.")
+
+
+@click.command("disable2fa")
+@click.option("--username", prompt=True)
+@with_appcontext
+def disable_2fa(username):
+    """Turn off two-factor authentication for a user (lost device)."""
+    db = _db()
+    db.execute("UPDATE users SET totp_secret = NULL, totp_pending_secret = NULL WHERE id = ?",
+               (_user(db, username)["id"],))
+    db.commit()
+    log_event("cli_disable2fa", user=username)
+    click.echo(f"Two-factor authentication disabled for {username}.")
 
 
 @click.command("changeusername")
@@ -115,23 +139,10 @@ def delete_user(username, files_action, target, yes):
     if not yes and not click.confirm(summary + "?"):
         raise click.Abort()
 
-    stored = []
     try:
-        db.execute("BEGIN IMMEDIATE")
-        if target_row:
-            db.execute("UPDATE files SET user_id = ? WHERE user_id = ?", (target_row["id"], user["id"]))
-        else:
-            stored = [r["stored_name"] for r in db.execute("SELECT stored_name FROM files WHERE user_id = ?",
-                                                           (user["id"],))]
-            db.execute("DELETE FROM files WHERE user_id = ?", (user["id"],))
-        db.execute("DELETE FROM users WHERE id = ?", (user["id"],))
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
-    # Disk files go only after the commit: a crash leaves unreferenced files, never rows without files.
-    for name in stored:
-        storage.remove_quietly(storage.abs_path(name))
+        users.delete_user(db, user, files_action, target_row)
+    except users.UserError as e:
+        raise click.ClickException(str(e))
     log_event("cli_deleteuser", user=username, files=files_action, count=count)
     click.echo(summary + ": done.")
 
@@ -141,12 +152,13 @@ def delete_user(username, files_action, target, yes):
 def list_users():
     """List users."""
     rows = _db().execute(
-        "SELECT u.id, u.username, COUNT(f.id) AS n, COALESCE(SUM(f.size), 0) AS bytes "
+        "SELECT u.id, u.username, u.is_admin, u.disabled, COUNT(f.id) AS n, COALESCE(SUM(f.size), 0) AS bytes "
         "FROM users u LEFT JOIN files f ON f.user_id = u.id GROUP BY u.id ORDER BY u.id").fetchall()
     if not rows:
         click.echo("No users found.")
     for r in rows:
-        click.echo(f"ID: {r['id']}  Username: {r['username']}  Files: {r['n']}  Bytes: {r['bytes']}")
+        flags = (" [admin]" if r["is_admin"] else "") + (" [disabled]" if r["disabled"] else "")
+        click.echo(f"ID: {r['id']}  Username: {r['username']}{flags}  Files: {r['n']}  Bytes: {r['bytes']}")
 
 
 @click.command("migrate")
@@ -161,5 +173,6 @@ def migrate_cmd(dry_run):
 
 
 def register(app):
-    for cmd in (add_user, change_password, change_username, delete_user, list_users, migrate_cmd):
+    for cmd in (add_user, change_password, set_admin, disable_2fa, change_username, delete_user, list_users,
+                migrate_cmd):
         app.cli.add_command(cmd)

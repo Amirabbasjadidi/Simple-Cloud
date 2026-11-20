@@ -17,26 +17,26 @@ def q(app, sql, *params):
 
 
 def test_adduser_noninteractive_and_prompt(app):
-    r = run(app, "adduser", "--username", "carol", "--password", "secret1")
+    r = run(app, "adduser", "--username", "carol", "--password", "secret-one")
     assert r.exit_code == 0, r.output
-    r = run(app, "adduser", input="dave\nsecret2\nsecret2\n")
+    r = run(app, "adduser", input="dave\nsecret-two\nsecret-two\n")
     assert r.exit_code == 0, r.output
-    assert "secret2" not in r.output  # hidden prompt
+    assert "secret-two" not in r.output  # hidden prompt
     assert {u for (u,) in q(app, "SELECT username FROM users")} >= {"carol", "dave"}
     assert run(app, "adduser", "--username", "carol", "--password", "x").exit_code != 0
 
 
 def test_adduser_password_from_env(app):
-    r = run(app, "adduser", "--username", "erin", env={"SIMPLECLOUD_PASSWORD": "envpw"})
+    r = run(app, "adduser", "--username", "erin", env={"SIMPLECLOUD_PASSWORD": "env-password"})
     assert r.exit_code == 0, r.output
     c = app.test_client()
-    assert login(app, c, "erin", "envpw").json["success"]
+    assert login(app, c, "erin", "env-password").json["success"]
 
 
 def test_changepassword(app):
     add_user(app, "alice")
-    assert run(app, "changepassword", "--username", "alice", "--password", "newpw").exit_code == 0
-    assert login(app, app.test_client(), "alice", "newpw").json["success"]
+    assert run(app, "changepassword", "--username", "alice", "--password", "new-password").exit_code == 0
+    assert login(app, app.test_client(), "alice", "new-password").json["success"]
     assert run(app, "changepassword", "--username", "nobody", "--password", "x").exit_code != 0
 
 
