@@ -54,10 +54,16 @@ def unauthorized():
     return redirect(url_for("auth.login", next=request.path))
 
 
+# What a user who must change their password can still reach: the settings page, the read-only
+# usage figure it shows, and the password change itself.
+MUST_CHANGE_ALLOWED = ("auth.account_page", "auth.change_password", "auth.logout", "i18n.set_language",
+                       "files.api_usage", "static")
+
+
 @bp.before_app_request
 def force_password_change():
     if (current_user.is_authenticated and current_user.must_change_password
-            and request.endpoint not in ("auth.account_page", "auth.change_password", "auth.logout", "i18n.set_language", "static")):
+            and request.endpoint not in MUST_CHANGE_ALLOWED):
         if request.path.startswith("/api/") or request.method != "GET":
             return jsonify(success=False, error="You must change your password first.",
                            must_change_password=True), 403

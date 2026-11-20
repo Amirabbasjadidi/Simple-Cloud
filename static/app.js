@@ -30,7 +30,8 @@ const SC = (() => {
       const err = new Error(data.error ? t(data.error) : `${t("Request failed")} (HTTP ${r.status})`);
       err.status = r.status;
       err.data = data;
-      if (data.must_change_password) window.location.href = "/account";
+      // Never from /account itself: reloading it would loop forever.
+      if (data.must_change_password && window.location.pathname !== "/account") window.location.href = "/account";
       throw err;
     }
     return data;
