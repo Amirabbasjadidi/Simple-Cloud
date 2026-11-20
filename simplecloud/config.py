@@ -68,6 +68,9 @@ def load_config():
         "LOGIN_MAX_FAILURES_IP": get_int("LOGIN_MAX_FAILURES_IP", 20),
         "LOGIN_LOCKOUT_SECONDS": get_int("LOGIN_LOCKOUT_SECONDS", 900),
         "CAPTCHA_TTL_SECONDS": get_int("CAPTCHA_TTL_SECONDS", 300),
+        # After a share download is counted, that client may keep requesting the file (ranges,
+        # parallel segments of download managers, retries) for this long without being counted again.
+        "SHARE_GRANT_SECONDS": get_int("SHARE_GRANT_SECONDS", 12 * 3600),
         # Flask-Limiter: coarse per-worker limits; memory:// is per process.
         "RATELIMIT_STORAGE_URI": get("RATELIMIT_STORAGE_URI", "memory://"),
         "RATELIMIT_ENABLED": get_bool("RATELIMIT_ENABLED", True),

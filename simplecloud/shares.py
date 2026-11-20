@@ -1,8 +1,9 @@
 """Share links: random token, optional expiry, optional password, optional download limit, revocable."""
+import hashlib
 import secrets
 import time
 
-from flask import Blueprint, jsonify, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, render_template, request, session, url_for
 from flask_login import current_user, login_required
 from werkzeug.security import check_password_hash, generate_password_hash
 
@@ -120,6 +121,55 @@ def _unlocked(row):
     return not row["password_hash"] or row["id"] in session.get("shares_unlocked", [])
 
 
+def _grant_cookie(row):
+    return f"share_grant_{row['id']}"
+
+
+def _has_grant(db, row):
+    """This client's unexpired download grant: "cookie" (its grant cookie), "ip" (same address,
+    for download managers that fetch segments without the browser's cookies) or None."""
+    token = request.cookies.get(_grant_cookie(row), "")
+    token_hash = hashlib.sha256(token.encode()).hexdigest() if token else ""
+    hit = db.execute(
+        "SELECT MAX(token_hash = ?) AS by_cookie FROM share_grants "
+        "WHERE share_id = ? AND expires_at > ? AND (token_hash = ? OR ip = ?)",
+        (token_hash, row["id"], time.time(), token_hash, request.remote_addr or "")).fetchone()
+    if hit["by_cookie"] is None:
+        return None
+    return "cookie" if hit["by_cookie"] else "ip"
+
+
+def _count_download(db, row):
+    """Count one download and open a grant, atomically across workers.
+
+    Returns (allowed, new_grant_token). A client that already holds a grant is never counted again;
+    the check is repeated inside the write lock so simultaneous first requests (parallel segments)
+    from one client count once.
+    """
+    now = time.time()
+    db.execute("BEGIN IMMEDIATE")
+    try:
+        if _has_grant(db, row):
+            db.execute("COMMIT")
+            return True, None
+        cur = db.execute("UPDATE shares SET download_count = download_count + 1 WHERE id = ? "
+                         "AND (max_downloads IS NULL OR download_count < max_downloads)", (row["id"],))
+        if not cur.rowcount:
+            db.execute("ROLLBACK")
+            return False, None
+        token = secrets.token_urlsafe(24)
+        db.execute("DELETE FROM share_grants WHERE expires_at <= ?", (now,))
+        db.execute("INSERT INTO share_grants (share_id, token_hash, ip, expires_at) VALUES (?, ?, ?, ?)",
+                   (row["id"], hashlib.sha256(token.encode()).hexdigest(), request.remote_addr or "",
+                    now + current_app.config["SHARE_GRANT_SECONDS"]))
+        db.execute("COMMIT")
+        return True, token
+    except BaseException:
+        if db.in_transaction:
+            db.execute("ROLLBACK")
+        raise
+
+
 def _gone(state):
     return render_template("share_public.html", share=None, state=state), 404 if state == "missing" else 410
 
@@ -135,6 +185,8 @@ def _no_index(resp):
 @bp.route("/s/<token>", methods=["GET"])
 def public_page(token):
     row, state = _public_share(token)
+    if state == "exhausted" and _has_grant(get_db(), row):
+        state = "ok"  # this client's download is still running / may resume
     if state != "ok":
         return _gone(state)
     return render_template("share_public.html", share=row, state=state, unlocked=_unlocked(row),
@@ -155,21 +207,29 @@ def public_unlock(token):
     return jsonify(success=True)
 
 
-@bp.route("/s/<token>/download")
+@bp.route("/s/<token>/download")  # GET and HEAD
 def public_download(token):
     row, state = _public_share(token)
-    if state != "ok":
+    if state in ("missing", "expired"):
         return _gone(state)
-    if not _unlocked(row):
+    db = get_db()
+    granted = _has_grant(db, row)
+    if state == "exhausted" and not granted:
+        return _gone(state)
+    # The grant cookie stands in for the password (it was issued after unlocking); a bare IP match
+    # does not, so someone else behind the same NAT cannot skip a share's password.
+    if granted != "cookie" and not _unlocked(row):
         return render_template("share_public.html", share=row, state=state, unlocked=False, remaining=None), 403
-    # Count a download once: resumed/partial requests (Range not starting at 0) are free.
-    rng = request.headers.get("Range", "")
-    if not rng or rng.replace(" ", "").startswith("bytes=0-"):
-        db = get_db()
-        cur = db.execute("UPDATE shares SET download_count = download_count + 1 WHERE id = ? "
-                         "AND (max_downloads IS NULL OR download_count < max_downloads)", (row["id"],))
-        db.commit()
-        if not cur.rowcount:
+    new_grant = None
+    if not granted and request.method != "HEAD":  # a HEAD probe transfers nothing: never counted
+        allowed, new_grant = _count_download(db, row)
+        if not allowed:
             return _gone("exhausted")
-        log_event("share_download", share_id=row["id"], file_id=row["file_id"])
-    return _send(row, inline=False)
+        if new_grant:
+            log_event("share_download", share_id=row["id"], file_id=row["file_id"])
+    resp = _send(row, inline=False)
+    if new_grant:
+        resp.set_cookie(_grant_cookie(row), new_grant, max_age=current_app.config["SHARE_GRANT_SECONDS"],
+                        path=f"/s/{token}", httponly=True, samesite="Lax",
+                        secure=current_app.config["SESSION_COOKIE_SECURE"])
+    return resp

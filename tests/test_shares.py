@@ -56,7 +56,8 @@ def test_password(two_users, app):
     assert anon.post(f"/s/{t}", json={"password": "wrong"}).status_code == 403
     assert anon.post(f"/s/{t}", json={"password": "open sesame"}).json["success"]
     assert anon.get(f"/s/{t}/download").data == b"%PDF-data"
-    assert app.test_client().get(f"/s/{t}/download").status_code == 403  # unlock is per visitor
+    assert app.test_client().get(f"/s/{t}/download").status_code == 403  # unlock is per visitor (same IP)
+    assert _client(app, "10.0.0.9").get(f"/s/{t}/download").status_code == 403
 
 
 def test_download_limit(two_users, app):
@@ -65,9 +66,11 @@ def test_download_limit(two_users, app):
     anon = app.test_client()
     t = token(share)
     assert anon.get(f"/s/{t}/download").status_code == 200
-    assert anon.get(f"/s/{t}/download", headers={"Range": "bytes=3-"}).status_code == 206  # resume: not counted
-    assert anon.get(f"/s/{t}/download").status_code == 200
-    assert anon.get(f"/s/{t}/download").status_code == 410
+    assert anon.get(f"/s/{t}/download", headers={"Range": "bytes=3-"}).status_code == 206  # same client: not counted
+    assert anon.get(f"/s/{t}/download").status_code == 200  # retry within the grant: not counted
+    assert alice.get("/api/shares").json["shares"][0]["download_count"] == 1
+    assert _client(app, "10.0.0.2").get(f"/s/{t}/download").status_code == 200  # a new client: counted (2/2)
+    assert _client(app, "10.0.0.3").get(f"/s/{t}/download").status_code == 410
     assert alice.get("/api/shares").json["shares"][0]["download_count"] == 2
 
 
@@ -103,3 +106,84 @@ def test_invalid_options(two_users):
 
 def test_unknown_token(app):
     assert app.test_client().get("/s/not-a-real-token").status_code == 404
+
+
+def _client(app, ip):
+    c = app.test_client()
+    c.environ_base["REMOTE_ADDR"] = ip
+    return c
+
+
+def test_download_manager_segments_with_limit_one(two_users, app):
+    """max_downloads=1: a full GET then parallel Range segments, retries and HEAD from the same
+    client all succeed and count once; another client is refused."""
+    alice, _ = two_users
+    data = b"0123456789" * 1000
+    fid = upload(alice, "big.bin", data).json["id"]
+    t = token(alice.post(f"/api/files/{fid}/shares", json={"max_downloads": 1}).json["share"])
+    idm = _client(app, "192.168.1.50")
+    assert idm.head(f"/s/{t}/download").status_code == 200  # a probe is not a download
+    assert idm.get(f"/s/{t}/download").data == data
+    for start in (0, 2500, 5000, 7500):
+        r = idm.get(f"/s/{t}/download", headers={"Range": f"bytes={start}-{start + 2499}"})
+        assert r.status_code == 206 and r.data == data[start:start + 2500]
+    assert idm.get(f"/s/{t}/download", headers={"Range": "bytes=9000-"}).data == data[9000:]
+    assert idm.head(f"/s/{t}/download").status_code == 200
+    assert idm.get(f"/s/{t}").status_code == 200  # the page still opens for this client
+    # a download manager on the same machine without the browser's cookies (IP fallback)
+    assert _client(app, "192.168.1.50").get(f"/s/{t}/download", headers={"Range": "bytes=5000-"}).status_code == 206
+    assert alice.get("/api/shares").json["shares"][0]["download_count"] == 1
+
+    other = _client(app, "192.168.1.51")
+    assert other.get(f"/s/{t}/download").status_code == 410
+    assert other.get(f"/s/{t}/download", headers={"Range": "bytes=100-"}).status_code == 410
+    assert other.head(f"/s/{t}/download").status_code == 410
+    assert other.get(f"/s/{t}").status_code == 410
+
+
+def test_first_request_may_be_a_range_and_is_counted(two_users, app):
+    """No more free downloads through Range requests: without a grant any request counts."""
+    alice, _ = two_users
+    fid = upload(alice, "a.bin", b"x" * 100).json["id"]
+    t = token(alice.post(f"/api/files/{fid}/shares", json={"max_downloads": 1}).json["share"])
+    assert _client(app, "10.1.1.1").get(f"/s/{t}/download", headers={"Range": "bytes=50-"}).status_code == 206
+    assert _client(app, "10.1.1.2").get(f"/s/{t}/download", headers={"Range": "bytes=50-"}).status_code == 410
+
+
+def test_grant_expires(two_users, app, monkeypatch):
+    alice, _ = two_users
+    fid = upload(alice, "a.bin", b"x" * 100).json["id"]
+    t = token(alice.post(f"/api/files/{fid}/shares", json={"max_downloads": 1}).json["share"])
+    c = _client(app, "10.2.2.2")
+    assert c.get(f"/s/{t}/download").status_code == 200
+    import simplecloud.shares as shares_mod
+    later = time.time() + app.config["SHARE_GRANT_SECONDS"] + 1
+    monkeypatch.setattr(shares_mod.time, "time", lambda: later)
+    assert c.get(f"/s/{t}/download", headers={"Range": "bytes=10-"}).status_code == 410
+
+
+def test_grant_is_shared_across_workers(two_users, make_app, app):
+    """Grants live in SQLite: a second app instance (another gunicorn worker) honours them."""
+    alice, _ = two_users
+    fid = upload(alice, "a.bin", b"x" * 100).json["id"]
+    t = token(alice.post(f"/api/files/{fid}/shares", json={"max_downloads": 1}).json["share"])
+    assert _client(app, "10.3.3.3").get(f"/s/{t}/download").status_code == 200
+    worker2 = make_app()
+    assert _client(worker2, "10.3.3.3").get(f"/s/{t}/download", headers={"Range": "bytes=10-"}).status_code == 206
+
+
+def test_password_share_grant_cookie_vs_ip(two_users, app):
+    alice, _ = two_users
+    _, share = make_share(alice, password="pw", max_downloads=1)
+    t = token(share)
+    c = _client(app, "10.4.4.4")
+    assert c.post(f"/s/{t}", json={"password": "pw"}).json["success"]
+    assert c.get(f"/s/{t}/download").status_code == 200
+    # the grant cookie works in a fresh session too (e.g. a download manager that copies cookies)
+    cookie = c.get_cookie(f"share_grant_{share['id']}", path=f"/s/{t}")
+    assert cookie is not None and cookie.http_only
+    fresh = _client(app, "10.9.9.9")
+    fresh.set_cookie(cookie.key, cookie.value, path=f"/s/{t}")
+    assert fresh.get(f"/s/{t}/download", headers={"Range": "bytes=2-"}).status_code == 206
+    # same IP without cookie or password: not counted again, but the password still applies
+    assert _client(app, "10.4.4.4").get(f"/s/{t}/download").status_code == 403

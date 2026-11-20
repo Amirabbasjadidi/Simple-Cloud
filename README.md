@@ -54,6 +54,7 @@ variables override them. The most useful ones:
 | `MAX_FILE_SIZE` | 10 GiB | Largest stored file (chunked uploads and URL fetches). |
 | `DEFAULT_QUOTA_BYTES` | 0 | Quota for new users; 0 = unlimited. |
 | `MIN_PASSWORD_LENGTH` | 8 | |
+| `SHARE_GRANT_SECONDS` | 43200 (12 h) | After a share-link download is counted, that browser or download manager may resume, retry and fetch in parallel segments for this long without using up the download limit. |
 | `LOGIN_MAX_FAILURES_USER` / `_IP`, `LOGIN_LOCKOUT_SECONDS` | 5 / 20, 900 | Login lockout. |
 | `COOKIE_SECURE` | 0 | Keep 0 on plain HTTP. Set 1 only if the site is served over HTTPS. |
 | `PROXY_COUNT` | 1 (installer) | Number of reverse proxies in front of the app. |
