@@ -1,35 +1,36 @@
 {% extends "base.html" %}
-{% block title %}Shared file{% endblock %}
-{% block body_class %}page-center{% endblock %}
+{% set bare = true %}
+{% block title %}{{ _("Shared file") }}{% endblock %}
 {% block content %}
-<section class="card card-narrow" aria-labelledby="share-title">
+<section class="card auth-card" aria-labelledby="share-title">
+    <div class="auth-brand">{{ icon("cloud") }}</div>
     {% if not share %}
-        <h1 id="share-title">Link unavailable</h1>
+        <h1 id="share-title">{{ _("Link unavailable") }}</h1>
         <p>
-        {% if state == "expired" %}This share link has expired.
-        {% elif state == "exhausted" %}This share link has reached its download limit.
-        {% else %}This link is invalid or has been revoked.{% endif %}
+        {% if state == "expired" %}{{ _("This share link has expired.") }}
+        {% elif state == "exhausted" %}{{ _("This share link has reached its download limit.") }}
+        {% else %}{{ _("This link is invalid or has been revoked.") }}{% endif %}
         </p>
     {% else %}
         <h1 id="share-title" class="share-name" dir="auto">{{ share.file_name }}</h1>
         <p class="muted" id="share-meta" data-size="{{ share.size }}" data-expires="{{ share.expires_at or '' }}">
             <span id="share-size"></span>
-            {% if remaining is not none %} · {{ remaining }} download(s) left{% endif %}
-            {% if share.expires_at %} · Expires <time id="share-expires"></time>{% endif %}
+            {% if remaining is not none %} · {{ _("Downloads left: %(n)s", n=remaining) }}{% endif %}
+            {% if share.expires_at %} · {{ _("Expires") }} <time id="share-expires"></time>{% endif %}
         </p>
         {% if unlocked %}
-            <a class="btn btn-primary btn-block" href="{{ url_for('shares.public_download', token=share.token) }}">Download</a>
+            <a class="btn btn-primary btn-block" href="{{ url_for('shares.public_download', token=share.token) }}">{{ icon("download") }}<span>{{ _("Download") }}</span></a>
         {% else %}
             <form id="unlock-form" class="form" data-token="{{ share.token }}" novalidate>
                 <div class="field">
-                    <label for="share-password">This file is protected. Enter the password:</label>
-                    <input id="share-password" type="password" autocomplete="off" required>
+                    <label for="share-password">{{ _("This file is protected. Enter the password:") }}</label>
+                    <input id="share-password" type="password" autocomplete="off" required dir="ltr">
                 </div>
-                <button type="submit" class="btn btn-primary">Unlock</button>
+                <button type="submit" class="btn btn-primary btn-block">{{ icon("lock") }}<span>{{ _("Unlock") }}</span></button>
             </form>
         {% endif %}
     {% endif %}
-    <p class="muted share-brand">Shared with Simple Cloud</p>
+    <p class="muted share-brand">{{ _("Shared with Simple Cloud") }}</p>
 </section>
 {% endblock %}
 {% block scripts %}

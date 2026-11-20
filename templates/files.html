@@ -1,38 +1,39 @@
 {% extends "base.html" %}
-{% block title %}Files{% endblock %}
+{% block title %}{{ _("Files") }}{% endblock %}
 {% block content %}
 <div class="page-head">
-    <nav aria-label="Folder path" class="breadcrumbs"><ol id="breadcrumbs"></ol></nav>
-    <div class="usage usage-compact" data-usage>
-        <div class="progress" role="progressbar" aria-label="Storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
-        <p class="usage-text muted"></p>
-    </div>
+    <nav aria-label="{{ _('Folder path') }}" class="breadcrumbs"><ol id="breadcrumbs"><li><span aria-current="page">{{ _("My files") }}</span></li></ol></nav>
 </div>
 
-<div class="toolbar" role="toolbar" aria-label="File actions">
-    <div class="search">
-        <label for="search" class="sr-only">Search all files</label>
-        <input id="search" type="search" placeholder="Search all files" autocomplete="off">
+<div class="toolbar" role="toolbar" aria-label="{{ _('File actions') }}">
+    <div class="search input-group">
+        {{ icon("search") }}
+        <label for="search" class="sr-only">{{ _("Search all files") }}</label>
+        <input id="search" type="search" placeholder="{{ _('Search all files') }}" autocomplete="off" dir="auto">
     </div>
-    <label for="sort" class="sr-only">Sort by</label>
+    <label for="sort" class="sr-only">{{ _("Sort by") }}</label>
     <select id="sort">
-        <option value="date:desc">Newest first</option>
-        <option value="date:asc">Oldest first</option>
-        <option value="name:asc">Name A–Z</option>
-        <option value="name:desc">Name Z–A</option>
-        <option value="size:desc">Largest first</option>
-        <option value="size:asc">Smallest first</option>
+        <option value="date:desc">{{ _("Newest first") }}</option>
+        <option value="date:asc">{{ _("Oldest first") }}</option>
+        <option value="name:asc">{{ _("Name A–Z") }}</option>
+        <option value="name:desc">{{ _("Name Z–A") }}</option>
+        <option value="size:desc">{{ _("Largest first") }}</option>
+        <option value="size:asc">{{ _("Smallest first") }}</option>
     </select>
-    <div class="segmented" role="group" aria-label="View">
-        <button type="button" class="btn" data-view="grid" aria-pressed="true">Grid</button>
-        <button type="button" class="btn" data-view="list" aria-pressed="false">List</button>
+    <div class="segmented" role="group" aria-label="{{ _('View') }}">
+        <button type="button" class="btn btn-icon" data-view="grid" aria-pressed="true" aria-label="{{ _('Grid') }}" title="{{ _('Grid') }}">{{ icon("grid") }}</button>
+        <button type="button" class="btn btn-icon" data-view="list" aria-pressed="false" aria-label="{{ _('List') }}" title="{{ _('List') }}">{{ icon("list") }}</button>
     </div>
-    <button type="button" class="btn" id="new-folder">New folder</button>
-    <a class="btn btn-primary" id="upload-here" href="{{ url_for('files.upload_page') }}">Upload</a>
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="new-folder">{{ icon("folder-plus") }}<span>{{ _("New folder") }}</span></button>
+    <a class="btn btn-primary" id="upload-here" href="{{ url_for('files.upload_page') }}">{{ icon("upload") }}<span>{{ _("Upload") }}</span></a>
 </div>
 
-<section id="listing" class="listing view-grid" aria-live="polite" aria-busy="true">
-    <p class="state muted">Loading…</p>
+<section id="listing" class="listing view-grid" aria-live="polite" aria-busy="true" aria-label="{{ _('Files') }}">
+    <ul class="items" aria-hidden="true">
+        <li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li><li class="skeleton"></li>
+    </ul>
+    <p class="sr-only">{{ _("Loading…") }}</p>
 </section>
 
 {% include "_share_dialog.html" %}
@@ -40,9 +41,9 @@
 <dialog id="preview-dialog" class="dialog dialog-preview" aria-labelledby="preview-title">
     <form method="dialog">
         <header class="preview-head">
-            <h2 id="preview-title" class="dialog-title"></h2>
-            <a class="btn btn-sm" id="preview-download" download>Download</a>
-            <button type="button" value="cancel" class="btn btn-sm" aria-label="Close preview">Close</button>
+            <h2 id="preview-title" class="dialog-title" dir="auto"></h2>
+            <a class="btn btn-sm" id="preview-download" download>{{ icon("download") }}<span>{{ _("Download") }}</span></a>
+            <button type="button" value="cancel" class="btn btn-sm btn-icon" aria-label="{{ _('Close preview') }}">{{ icon("x") }}</button>
         </header>
         <div id="preview-body" class="preview-body"></div>
     </form>
