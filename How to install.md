@@ -12,7 +12,7 @@ What the installer sets up:
 | Settings, including the generated `SECRET_KEY` | `/etc/simplecloud.env` |
 | App service (gunicorn on 127.0.0.1:8000, user `simplecloud`) | `simplecloud.service` |
 | Web server on port 80 | Nginx site `/etc/nginx/sites-available/simplecloud` |
-| Optional daily backup | `simplecloud-backup.timer` |
+| Optional daily database backup | `simplecloud-backup.timer` |
 
 ## 1. Install
 
@@ -30,8 +30,9 @@ used to start it). Options:
 |---|---|
 | `--domain NAME` | Name the site answers to (Nginx `server_name`). Without it, it answers on any name/IP. |
 | `--pip-index URL` | Install Python packages from a PyPI mirror, for example `--pip-index http://pypi.mirror.local/simple` (an `http://` mirror is marked trusted automatically). |
-| `--backup-timer` | Back up every night at 03:00. |
-| `--backup-keep N` | How many nightly archives to keep (default 14). |
+| `--backup-timer` | Back up the **database** every night at 03:00 (not the uploaded files, see section 5). |
+| `--backup-keep N` | How many nightly database backups to keep (default 14). Remembered for later runs. |
+| `--backup-dir PATH` | Where the database backups go, for example another disk or a mounted NAS share (default `/var/lib/simplecloud/backups`). Remembered for later runs. |
 | `--workers N` | gunicorn worker processes (default 4). |
 | `--branch NAME`, `--repo URL` | Install another branch or a fork. |
 | `--dir PATH`, `--data-dir PATH` | Other locations for the code and the data. |
@@ -106,69 +107,140 @@ journalctl -u simplecloud | grep event=login_failed
 
 ## 5. Backups
 
-A backup is one file, `simplecloud-YYYYmmdd-HHMMSS.tar.gz`, containing a consistent snapshot of
-the database (taken with SQLite's online backup API, so the app keeps running) and all uploaded
-files. Archives are readable only by the `simplecloud` user: they contain every user's files.
+There are two kinds of backup. Both are single `.tar.gz` files and both use SQLite's online backup
+API, so the database copy is consistent and the app keeps running.
 
-**Daily, automatic:** install with `--backup-timer` (or re-run the installer with it). Archives
-go to `/var/lib/simplecloud/backups`, the newest 14 are kept (`--backup-keep N`).
+| | Database backup | Full backup |
+|---|---|---|
+| File name | `simplecloud-db-YYYYmmdd-HHMMSS.tar.gz` | `simplecloud-YYYYmmdd-HHMMSS.tar.gz` |
+| Contains | the database: users, password hashes, 2FA settings, folders, file list and owners, share links, quotas | the database **and every uploaded file** |
+| Size | small (usually a few MB) | as large as all uploads |
+| How | nightly timer, or by hand with `--db-only` | **only by hand**; the timer never runs it |
+| Default location | `DB_BACKUP_FOLDER` (set by `--backup-dir`) | `BACKUP_FOLDER` (`/var/lib/simplecloud/backups`) |
+
+**The nightly backup does not contain the uploaded files** (they are too large to copy every
+night). Protect `/var/lib/simplecloud/uploads` separately, for example with an rsync or snapshot of
+that disk to another machine: uploads are stored under random names and never changed in place, so
+an incremental copy is cheap.
 
 ```bash
-systemctl list-timers simplecloud-backup     # next run
-journalctl -u simplecloud-backup             # results
+rsync -a /var/lib/simplecloud/uploads/ /mnt/nas/simplecloud-uploads/      # run as root, e.g. from cron
 ```
 
-**By hand, any time:**
+Archives are readable only by the `simplecloud` user: they contain password hashes (and, for full
+backups, every user's files).
+
+### The nightly database backup
+
+Turn it on (or change its settings) by running the installer again; the location and retention
+are remembered in `/etc/simplecloud.env` (`DB_BACKUP_FOLDER`, `BACKUP_KEEP`):
+
+```bash
+sudo ./install.sh --domain cloud.local --backup-timer                                   # on, defaults
+sudo ./install.sh --domain cloud.local --backup-timer --backup-keep 30                  # keep 30
+sudo ./install.sh --domain cloud.local --backup-timer --backup-dir /mnt/nas/simplecloud # on a NAS
+```
+
+It runs at 03:00 (within 15 minutes; a run missed while the server was off happens at the next
+boot) and keeps the newest 14 database backups. Retention only ever deletes files named
+`simplecloud-db-*.tar.gz` in that folder: full backups and anything else there are never touched.
+
+**On a NAS or another disk:** mount it first and make it permanent in `/etc/fstab`; the backup
+waits for the mount (`RequiresMountsFor`). The `simplecloud` user must be able to write there; the
+installer checks this and stops with a message if not. For a CIFS/SMB share, mount it with that
+user as owner, for example:
+
+```
+//nas.local/backups  /mnt/nas  cifs  credentials=/root/.nas-cred,uid=simplecloud,gid=simplecloud,file_mode=0600,dir_mode=0700,_netdev  0  0
+```
+
+Check and control the timer:
+
+```bash
+systemctl list-timers simplecloud-backup                  # next run
+journalctl -u simplecloud-backup -n 20                    # last results
+sudo systemctl start simplecloud-backup                   # run one now
+sudo systemctl disable --now simplecloud-backup.timer     # turn the nightly backup off
+sudo systemctl enable --now simplecloud-backup.timer      # turn it back on
+```
+
+Re-running the installer without `--backup-timer` keeps a disabled timer disabled.
+
+### By hand
 
 ```bash
 cd /opt/simplecloud
+# database only, into DB_BACKUP_FOLDER
+sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app backup --db-only
+# full backup with all uploads (needs free space for a copy of all files), into BACKUP_FOLDER
 sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app backup
 ```
 
-A backup on the same disk does not protect against a dead disk: copy the archives to another
-machine, for example from that machine every night:
-
-```bash
-rsync -a admin@cloud.local:/var/lib/simplecloud/backups/ /srv/backup/simplecloud/
-```
-
-(Make the archives readable for that account, or run rsync as root on the server side.)
+Both accept `--output-dir PATH` and `--keep N` (the latter only deletes older archives of the same
+kind in that folder).
 
 ## 6. Restore
 
-Restoring replaces the current database and files with those in the archive. The steps below keep
-the current data next to it (renamed), so nothing is lost if you picked the wrong archive.
+Both procedures keep the current data next to it (renamed), so nothing is lost if you picked the
+wrong archive. Set these first:
 
 ```bash
-ARCHIVE=/var/lib/simplecloud/backups/simplecloud-20261120-030000.tar.gz   # the one to restore
 D=/var/lib/simplecloud
 NOW=$(date +%Y%m%d-%H%M%S)
-
 sudo systemctl stop simplecloud simplecloud-backup.timer
+```
 
-# 1. move the current data aside (not deleted)
+### Restore the database (from a `simplecloud-db-*` archive)
+
+Use this when the database is damaged or someone made changes you need to undo (deleted users,
+folders or share links). The uploaded files stay where they are.
+
+```bash
+ARCHIVE=/var/lib/simplecloud/backups/simplecloud-db-20261120-030000.tar.gz   # the one to restore
+
 sudo mkdir "$D/before-restore-$NOW"
-sudo mv "$D/uploads" "$D"/database.db* "$D/before-restore-$NOW/"
+sudo mv "$D"/database.db* "$D/before-restore-$NOW/"          # current database, set aside
+sudo tar -xzf "$ARCHIVE" -C "$D" database.db
+sudo chown simplecloud:simplecloud "$D/database.db"
+```
 
-# 2. unpack the archive
-sudo mkdir "$D/restore-$NOW"
+What to expect: the database goes back to the night of the backup.
+- Files **uploaded after** the backup are still on disk but no longer listed (the database does not
+  know them). Users upload them again, or restore a newer backup.
+- Files **deleted after** the backup are listed again but cannot be downloaded (their data is gone),
+  unless you also restore them from your copy of the uploads folder. Users can delete those entries.
+- Passwords, users, share links and quotas are as they were that night.
+
+### Restore everything (from a full `simplecloud-*` archive)
+
+```bash
+ARCHIVE=/var/lib/simplecloud/backups/simplecloud-20261120-120000.tar.gz   # a full backup
+
+sudo mkdir "$D/before-restore-$NOW" "$D/restore-$NOW"
+sudo mv "$D/uploads" "$D"/database.db* "$D/before-restore-$NOW/"
 sudo tar -xzf "$ARCHIVE" -C "$D/restore-$NOW"
 sudo mv "$D/restore-$NOW/database.db" "$D/restore-$NOW/uploads" "$D/"
-sudo rmdir --ignore-fail-on-non-empty "$D/restore-$NOW"
+sudo rm -r "$D/restore-$NOW"                                   # only the leftover manifest.json
 sudo chown -R simplecloud:simplecloud "$D"
+```
 
-# 3. bring an older backup up to the installed version (no-op otherwise), then start
+### Then, in both cases
+
+```bash
 cd /opt/simplecloud
+# brings an older backup up to the installed version (does nothing if it is current)
 sudo -u simplecloud SIMPLECLOUD_ENV_FILE=/etc/simplecloud.env venv/bin/flask --app app migrate
-sudo systemctl start simplecloud simplecloud-backup.timer
+sudo systemctl start simplecloud
+sudo systemctl start simplecloud-backup.timer     # only if you use the nightly backup
 ```
 
 Check that you can sign in and open some files. When you are sure, remove
 `/var/lib/simplecloud/before-restore-*` yourself.
 
-On a **new server**, run the installer first, then follow the same steps. Copy the old
-`SECRET_KEY` line from the old `/etc/simplecloud.env` if you want existing "remember me" sign-ins
-to stay valid (otherwise everyone just signs in again).
+On a **new server**, run the installer first, then follow the same steps (for a database-only
+restore, copy the uploads folder over from your copy first). Copy the old `SECRET_KEY` line from the
+old `/etc/simplecloud.env` if you want existing "remember me" sign-ins to stay valid (otherwise
+everyone just signs in again).
 
 ## 7. Upgrading
 
@@ -200,7 +272,7 @@ the password `1234`, must choose a new password at the next sign-in. Stop the ol
 cp .env.example .env        # then set SECRET_KEY (openssl rand -hex 32)
 docker compose up -d
 docker compose logs app | grep -A2 "Initial admin"
-docker compose exec app flask --app app backup     # archives land in the data volume, /data/backups
+docker compose exec app flask --app app backup --db-only   # archives land in the data volume, /data/backups
 ```
 
 ## Troubleshooting

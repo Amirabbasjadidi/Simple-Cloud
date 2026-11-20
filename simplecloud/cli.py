@@ -173,14 +173,16 @@ def migrate_cmd(dry_run):
 
 
 @click.command("backup")
-@click.option("--output-dir", type=click.Path(file_okay=False), help="Where to write the archive (default: BACKUP_FOLDER).")
-@click.option("--keep", type=click.IntRange(min=1), help="Keep only the newest N archives in that directory.")
+@click.option("--db-only", is_flag=True, help="Only the database (simplecloud-db-*.tar.gz), no uploaded files.")
+@click.option("--output-dir", type=click.Path(file_okay=False),
+              help="Where to write the archive (default: BACKUP_FOLDER, or DB_BACKUP_FOLDER with --db-only).")
+@click.option("--keep", type=click.IntRange(min=1), help="Keep only the newest N archives of this kind in that directory.")
 @with_appcontext
-def backup_cmd(output_dir, keep):
-    """Write a .tar.gz with a consistent database snapshot and all uploads (safe while running)."""
+def backup_cmd(db_only, output_dir, keep):
+    """Write a .tar.gz with a consistent database snapshot and (unless --db-only) all uploads. Safe while running."""
     from . import backup
-    path = backup.create(current_app.config, out_dir=output_dir, keep=keep, echo=click.echo)
-    log_event("cli_backup", path=path)
+    path = backup.create(current_app.config, out_dir=output_dir, keep=keep, db_only=db_only, echo=click.echo)
+    log_event("cli_backup", path=path, db_only=db_only)
 
 
 def register(app):
