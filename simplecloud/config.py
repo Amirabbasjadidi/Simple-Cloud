@@ -31,12 +31,15 @@ def load_config():
         return str(get(name, default)).lower() in ("1", "true", "yes", "on")
 
     secure = get_bool("COOKIE_SECURE", False)
+    backup_folder = get("BACKUP_FOLDER", os.path.join(ROOT, "backups"))
     return {
         "SECRET_KEY": get("SECRET_KEY"),
         "DATABASE": get("DATABASE", os.path.join(ROOT, "database.db")),
         "UPLOAD_FOLDER": get("UPLOAD_FOLDER", os.path.join(ROOT, "uploads")),
         # Keep on the same filesystem as UPLOAD_FOLDER so migration backups can use hard links.
-        "BACKUP_FOLDER": get("BACKUP_FOLDER", os.path.join(ROOT, "backups")),
+        "BACKUP_FOLDER": backup_folder,
+        # Database-only backups (`flask backup --db-only`, the nightly timer); may be another disk or a NAS.
+        "DB_BACKUP_FOLDER": get("DB_BACKUP_FOLDER", backup_folder),
         "PORT": get_int("PORT", 8000),
         "LOG_LEVEL": get("LOG_LEVEL", "INFO").upper(),
         # Interface language when the browser has not picked one: fa (Persian) or en.

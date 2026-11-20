@@ -11,8 +11,10 @@
 #   --branch NAME         git branch (default main)
 #   --domain NAME         server_name for Nginx, e.g. cloud.local (default: catch-all)
 #   --pip-index URL       PyPI mirror for pip (e.g. http://mirror.local/simple)
-#   --backup-timer        daily backup at 03:00 via a systemd timer (flask backup)
-#   --backup-keep N       archives kept by the timer (default 14)
+#   --backup-timer        daily DATABASE-ONLY backup at 03:00 via a systemd timer
+#   --backup-keep N       database backups kept by the timer (default 14; remembered)
+#   --backup-dir PATH     where database backups go, e.g. another disk or a mounted NAS
+#                         (default DATA_DIR/backups; remembered)
 #   --upgrade             also run `apt upgrade`
 #   --import-from PATH    copy database.db and uploads/ from an old install (only into an empty data dir)
 #   --workers N           gunicorn workers (default 4)
@@ -26,7 +28,8 @@ BRANCH=main
 DOMAIN=""
 PIP_INDEX=""
 BACKUP_TIMER=0
-BACKUP_KEEP=14
+BACKUP_KEEP=""
+BACKUP_DIR=""
 APT_UPGRADE=0
 IMPORT_FROM=""
 WORKERS=4
@@ -35,7 +38,7 @@ ENV_FILE=/etc/simplecloud.env
 SERVICE_FILE=/etc/systemd/system/simplecloud.service
 NGINX_SITE=/etc/nginx/sites-available/simplecloud
 
-usage() { sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -47,6 +50,7 @@ while [ $# -gt 0 ]; do
         --pip-index) PIP_INDEX="$2"; shift 2 ;;
         --backup-timer) BACKUP_TIMER=1; shift ;;
         --backup-keep) BACKUP_KEEP="$2"; shift 2 ;;
+        --backup-dir) BACKUP_DIR="$2"; shift 2 ;;
         --upgrade) APT_UPGRADE=1; shift ;;
         --import-from) IMPORT_FROM="$2"; shift 2 ;;
         --workers) WORKERS="$2"; shift 2 ;;
@@ -59,7 +63,8 @@ log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
 
 [ "$(id -u)" -eq 0 ] || die "run as root: sudo $0 $*"
-[[ "$BACKUP_KEEP" =~ ^[1-9][0-9]*$ ]] || die "--backup-keep must be a positive number"
+[ -z "$BACKUP_KEEP" ] || [[ "$BACKUP_KEEP" =~ ^[1-9][0-9]*$ ]] || die "--backup-keep must be a positive number"
+[ -z "$BACKUP_DIR" ] || [[ "$BACKUP_DIR" == /* ]] || die "--backup-dir must be an absolute path"
 [[ "$WORKERS" =~ ^[0-9]+$ ]] || die "--workers must be a number"
 
 # ---------------------------------------------------------------- packages
@@ -122,12 +127,26 @@ fi
 set_default() {  # add KEY=VALUE to the env file only if KEY is not there yet
     grep -q "^$1=" "$ENV_FILE" 2>/dev/null || echo "$1=$2" >> "$ENV_FILE"
 }
+set_value() {  # set KEY=VALUE, replacing an existing line (values chosen on the command line)
+    if grep -q "^$1=" "$ENV_FILE"; then
+        local tmp; tmp=$(mktemp)
+        awk -v k="$1" -v v="$2" 'BEGIN{FS=OFS="="} $1==k{print k "=" v; next} {print}' "$ENV_FILE" > "$tmp"
+        cat "$tmp" > "$ENV_FILE"; rm -f "$tmp"
+    else
+        echo "$1=$2" >> "$ENV_FILE"
+    fi
+}
+env_value() { grep "^$1=" "$ENV_FILE" | tail -n1 | cut -d= -f2-; }
 log "Configuration in $ENV_FILE"
 touch "$ENV_FILE"
 set_default SECRET_KEY "$(openssl rand -hex 32)"
 set_default DATABASE "$DATA_DIR/database.db"
 set_default UPLOAD_FOLDER "$DATA_DIR/uploads"
 set_default BACKUP_FOLDER "$DATA_DIR/backups"
+# Database backups (timer and `flask backup --db-only`). Kept in the env file so re-running the
+# installer without the options never changes the location or retention by accident.
+if [ -n "$BACKUP_DIR" ]; then set_value DB_BACKUP_FOLDER "$BACKUP_DIR"; else set_default DB_BACKUP_FOLDER "$DATA_DIR/backups"; fi
+if [ -n "$BACKUP_KEEP" ]; then set_value BACKUP_KEEP "$BACKUP_KEEP"; else set_default BACKUP_KEEP 14; fi
 set_default PROXY_COUNT 1
 set_default COOKIE_SECURE 0
 set_default MAX_CONTENT_LENGTH 2147483648
@@ -204,12 +223,23 @@ fi
 nginx -t
 systemctl reload nginx
 
-# ---------------------------------------------------------------- daily backup (optional)
-if [ "$BACKUP_TIMER" -eq 1 ]; then
-    log "Daily backup timer (keeps $BACKUP_KEEP archives in the BACKUP_FOLDER)"
-    cat > /etc/systemd/system/simplecloud-backup.service <<EOF
+# ---------------------------------------------------------------- daily database backup (optional)
+# Only the database: uploads are too large to copy every night. A full backup with the uploads
+# is a manual command (`flask backup`), never run by the timer.
+DB_BACKUP_DIR=$(env_value DB_BACKUP_FOLDER)
+KEEP=$(env_value BACKUP_KEEP)
+BACKUP_UNIT=/etc/systemd/system/simplecloud-backup.service
+if [ "$BACKUP_TIMER" -eq 1 ] || [ -f "$BACKUP_UNIT" ]; then
+    log "Daily database backup: keeps $KEEP archives in $DB_BACKUP_DIR"
+    mkdir -p "$DB_BACKUP_DIR"
+    # On a NAS share ownership comes from the mount options, so a failed chown is not fatal.
+    chown "$APP_USER:$APP_USER" "$DB_BACKUP_DIR" 2>/dev/null && chmod 750 "$DB_BACKUP_DIR" || true
+    runuser -u "$APP_USER" -- test -w "$DB_BACKUP_DIR" \
+        || die "$DB_BACKUP_DIR is not writable by the $APP_USER user (for a CIFS/NFS share, mount it with uid=$APP_USER or matching permissions)"
+    cat > "$BACKUP_UNIT" <<EOF
 [Unit]
-Description=Simple Cloud backup
+Description=Simple Cloud database backup
+RequiresMountsFor=$DB_BACKUP_DIR
 
 [Service]
 Type=oneshot
@@ -218,18 +248,18 @@ Group=$APP_USER
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$ENV_FILE
 Environment=SIMPLECLOUD_ENV_FILE=$ENV_FILE
-ExecStart=$INSTALL_DIR/venv/bin/flask --app app backup --keep $BACKUP_KEEP
+ExecStart=$INSTALL_DIR/venv/bin/flask --app app backup --db-only --keep $KEEP
 Nice=10
 IOSchedulingClass=idle
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=$DATA_DIR
+ReadWritePaths=$DATA_DIR $DB_BACKUP_DIR
 EOF
     cat > /etc/systemd/system/simplecloud-backup.timer <<EOF
 [Unit]
-Description=Daily Simple Cloud backup
+Description=Daily Simple Cloud database backup
 
 [Timer]
 OnCalendar=*-*-* 03:00:00
@@ -240,7 +270,8 @@ Persistent=true
 WantedBy=timers.target
 EOF
     systemctl daemon-reload
-    systemctl enable --now --quiet simplecloud-backup.timer
+    # Re-runs refresh the unit but leave a timer you disabled disabled.
+    [ "$BACKUP_TIMER" -eq 0 ] || systemctl enable --now --quiet simplecloud-backup.timer
 fi
 
 # ---------------------------------------------------------------- done

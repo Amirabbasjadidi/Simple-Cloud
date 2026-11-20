@@ -18,8 +18,8 @@ and English**.
   workers; CSRF protection; strict Content-Security-Policy; uploads stored under random names.
 - **Interface:** mobile-first, light and dark mode, keyboard and screen-reader friendly (WCAG AA
   contrast), fonts bundled locally (Vazirmatn, Fira Sans), so it works on a network without internet.
-- **Operations:** `flask backup` (consistent snapshot into a `.tar.gz`) with an optional daily
-  systemd timer, safe resumable database migrations, structured logs.
+- **Operations:** a nightly database backup (optional systemd timer, can write to a NAS), a
+  manual full backup with all uploads, safe resumable database migrations, structured logs.
 
 It is designed to run on a LAN over **plain HTTP** (for example `http://cloud.local`). Nothing in
 the app requires HTTPS.
@@ -48,6 +48,7 @@ variables override them. The most useful ones:
 |---|---|---|
 | `SECRET_KEY` | (generated) | Signs sessions. Keep it secret; changing it signs everyone out. |
 | `DATABASE`, `UPLOAD_FOLDER`, `BACKUP_FOLDER` | `/var/lib/simplecloud/...` | Data locations. |
+| `DB_BACKUP_FOLDER` | `BACKUP_FOLDER` | Where database backups go (installer: `--backup-dir`). |
 | `DEFAULT_LANG` | `fa` | Interface language until a user picks one (`fa` or `en`). |
 | `MAX_CONTENT_LENGTH` | 2 GiB | Largest single request (Nginx is sized from it). |
 | `MAX_FILE_SIZE` | 10 GiB | Largest stored file (chunked uploads and URL fetches). |

@@ -37,8 +37,12 @@ which ends up in the shell history).
 | `changeusername --old NAME --new NAME` | Rename a user. Their files stay theirs. |
 | `deleteuser --username NAME [--files transfer --to OTHER \| --files delete] [--yes]` | Delete a user. A user who owns files needs `--files`: transfer them to another user, or delete them permanently. Asks for confirmation unless `--yes`. |
 | `listusers` | List users with id, admin and disabled flags, file count and bytes used. |
-| `backup [--output-dir DIR] [--keep N]` | Write `simplecloud-YYYYmmdd-HHMMSS.tar.gz` (database snapshot + uploads). `--keep N` deletes all but the newest N archives in that directory. Safe while the app runs. |
+| `backup --db-only [--output-dir DIR] [--keep N]` | Write `simplecloud-db-YYYYmmdd-HHMMSS.tar.gz` with only a database snapshot, into `DB_BACKUP_FOLDER`. This is what the nightly timer runs. |
+| `backup [--output-dir DIR] [--keep N]` | Full backup: `simplecloud-YYYYmmdd-HHMMSS.tar.gz` with the database snapshot and all uploads, into `BACKUP_FOLDER`. Manual only. |
 | `migrate [--dry-run]` | Bring the database up to date after an upgrade. Takes a backup first, is resumable, and `--dry-run` only prints the plan. The installer runs it for you. |
+
+For both kinds of backup, `--keep N` deletes all but the newest N archives **of that kind** in
+the folder; other files there are never touched. Both are safe while the app runs.
 
 ## Examples
 

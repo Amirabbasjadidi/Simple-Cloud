@@ -1,4 +1,5 @@
 import json
+import re
 import os
 import sqlite3
 import tarfile
@@ -74,3 +75,38 @@ def test_backup_works_while_db_is_open(app, tmp_path):
     snap = sqlite3.connect(tmp_path / "x" / "database.db")
     assert snap.execute("SELECT COUNT(*) FROM users WHERE username='uncommitted'").fetchone()[0] == 0
     snap.close()
+
+
+def test_db_only_backup_and_restore(make_app, tmp_path):
+    app = make_app(DB_BACKUP_FOLDER=str(tmp_path / "nas"))
+    add_user(app, "alice")
+    c = app.test_client()
+    assert login(app, c, "alice").json["success"]
+    fid = upload(c, "big.bin", b"x" * 1000).json["id"]
+
+    out = run_backup(app, "--db-only")
+    [name] = archives(tmp_path / "nas")  # DB_BACKUP_FOLDER is the default for --db-only
+    assert re.fullmatch(r"simplecloud-db-\d{8}-\d{6}\.tar\.gz", name) and name in out
+    with tarfile.open(tmp_path / "nas" / name) as tar:
+        assert sorted(tar.getnames()) == ["database.db", "manifest.json"]  # no uploads
+        assert json.load(tar.extractfile("manifest.json"))["db_only"] is True
+        tar.extract("database.db", tmp_path / "r", filter="data")
+    # restoring only the database next to the existing uploads gives the same files back
+    app2 = make_app(DATABASE=str(tmp_path / "r" / "database.db"))
+    c2 = app2.test_client()
+    assert login(app2, c2, "alice").json["success"]
+    assert c2.get(f"/files/{fid}/download").data == b"x" * 1000
+
+
+def test_db_and_full_retention_do_not_touch_each_other(app, tmp_path):
+    out = tmp_path / "b"
+    for _ in range(3):
+        run_backup(app, "--output-dir", str(out))
+    for _ in range(4):
+        run_backup(app, "--db-only", "--output-dir", str(out), "--keep", "2")
+    db = [f for f in archives(out) if f.startswith("simplecloud-db-")]
+    full = [f for f in archives(out) if not f.startswith("simplecloud-db-")]
+    assert len(db) == 2 and len(full) == 3
+    run_backup(app, "--output-dir", str(out), "--keep", "1")
+    db_after = [f for f in archives(out) if f.startswith("simplecloud-db-")]
+    assert db_after == db and len(archives(out)) == 3
