@@ -1,12 +1,11 @@
 import os
 
-from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, url_for
+from flask import Blueprint, abort, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
 from . import quota, storage
 from .db import get_db
 from .events import log_event
-from .fetch import FetchError, fetch_to_file
 
 bp = Blueprint("files", __name__)
 
@@ -200,29 +199,6 @@ def upload():
     file_id, name = add_file(get_db(), current_user.id, file.filename, file.save,
                              folder_id=folder["id"] if folder else None)
     log_event("upload", user=current_user.username, file_id=file_id, name=name)
-    return jsonify(success=True, id=file_id, filename=name)
-
-
-@bp.route("/download", methods=["POST"])
-@login_required
-def download_file_from_url():
-    url = str((request.get_json(silent=True) or {}).get("url") or "").strip()
-    if not url:
-        return jsonify(success=False, error="No URL provided"), 400
-    hint = {}
-    cfg = dict(current_app.config)
-    left = quota.remaining(get_db(), current_user.id)
-    cfg["FETCH_MAX_BYTES"] = min(x for x in (cfg["FETCH_MAX_BYTES"], cfg["MAX_FILE_SIZE"], left) if x is not None)
-
-    def write(path):
-        hint["name"] = fetch_to_file(url, path, cfg)[0] or "download"
-
-    try:
-        file_id, name = add_file(get_db(), current_user.id, lambda: hint["name"], write)
-    except FetchError as e:
-        log_event("fetch_failed", user=current_user.username, url=url, error=e)
-        return jsonify(success=False, error=str(e)), 400
-    log_event("fetch_ok", user=current_user.username, file_id=file_id, name=name, url=url)
     return jsonify(success=True, id=file_id, filename=name)
 
 

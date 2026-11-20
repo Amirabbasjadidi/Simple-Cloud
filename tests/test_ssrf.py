@@ -186,7 +186,13 @@ def test_https_untrusted_ca_fails(https_srv, cfg, tmp_path):
         fetch_to_file(f"https://pinned.test:{port}/a.txt", str(tmp_path / "f"), cfg)
 
 
-def test_endpoint_rejects_metadata_ip(two_users):
+def test_fetch_job_rejects_metadata_ip(two_users):
+    import time
     alice, _ = two_users
-    r = alice.post("/download", json={"url": "http://169.254.169.254/latest/meta-data/"})
-    assert r.status_code == 400 and "not allowed" in r.json["error"]
+    job = alice.post("/api/fetch", json={"url": "http://169.254.169.254/latest/meta-data/"}).json["jobs"][0]
+    for _ in range(100):
+        job = alice.get(f"/api/fetch/{job['id']}").json["job"]
+        if job["status"] not in ("queued", "running"):
+            break
+        time.sleep(0.05)
+    assert job["status"] == "failed" and "not allowed" in job["error"]

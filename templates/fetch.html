@@ -1,49 +1,30 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="csrf-token" content="{{ csrf_token() }}">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Download Files</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='Header.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='download.css') }}">
-    <link rel="icon" href="{{ url_for('static', filename='cloud.png') }}" type="image/png">
+{% extends "base.html" %}
+{% block title %}Fetch from URL{% endblock %}
+{% block content %}
+<h1>Fetch files from URLs</h1>
 
-</head>
-<body>
-    <header class="header-transparent">
-        <nav class="header-nav-container">
-            <h1 class="header-logo">Simple Cloud</h1>
-            <div class="hamburger-menu" id="hamburger-menu">
-                <span></span>
-                <span></span>
-                <span></span>
-                <span></span>
-            </div>
-            <div class="header-nav-buttons" id="header-nav-buttons">
-                <button id="nav-upload-btn">Upload File</button>
-                <button id="nav-Fetch-btn">Fetch URL</button>
-                <button id="nav-filemanager-btn">File Manager</button>
-                <button id="nav-logout-btn">Logout</button>
-            </div>
-        </nav>
-    </header>
-
-    <div class="download-container">
-        <h1>Fetch Files from URLs</h1>
-        <textarea id="url-list-input" class="url-input" placeholder="Enter URLs separated by commas (e.g., https://example.com/file1.png, https://example.com/file1.png)" rows="5"></textarea>
-        <button id="fetch-btn" class="action-btn">Fetch Files</button>
-        <button id="progress-btn" class="action-btn" disabled>View Progress</button>
-    </div>
-
-    <div id="download-progress-popup" class="popup">
-        <div class="popup-content">
-            <h2>Download Progress</h2>
-            <div id="download-progress-container"></div>
-            <button id="popup-close-btn" class="close-btn">Close</button>
+<section class="card" aria-labelledby="fetch-form-title">
+    <h2 id="fetch-form-title" class="sr-only">New download</h2>
+    <form id="fetch-form" class="form" novalidate>
+        <div class="field field-wide">
+            <label for="urls">URLs (one per line)</label>
+            <textarea id="urls" rows="5" dir="ltr" spellcheck="false" aria-describedby="urls-hint"
+                      placeholder="https://example.com/file.zip"></textarea>
+            <small id="urls-hint" class="hint">Downloads run on the server in the background. You can leave this page; progress is kept.</small>
         </div>
-    </div>
+        <div class="field">
+            <label for="fetch-folder">Save to</label>
+            <select id="fetch-folder"><option value="">My files</option></select>
+        </div>
+        <button type="submit" class="btn btn-primary">Start download</button>
+    </form>
+</section>
 
-    <script src="{{ url_for('static', filename='download.js') }}"></script>
-</body>
-</html>
+<section aria-labelledby="jobs-title">
+    <h2 id="jobs-title">Downloads</h2>
+    <ul id="jobs" class="queue" role="list" aria-live="polite"><li class="muted">Loading…</li></ul>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='fetch.js') }}"></script>
+{% endblock %}

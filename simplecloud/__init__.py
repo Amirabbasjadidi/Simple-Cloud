@@ -34,7 +34,7 @@ def create_app(overrides=None):
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-    from . import admin, auth, cli, db, files, uploads
+    from . import admin, auth, cli, db, files, jobs, uploads
     schema_ok = {"value": db.init_db(app)}
     if not schema_ok["value"]:
         app.logger.error("Database schema is out of date. Run `flask migrate --dry-run`, then `flask migrate`.")
@@ -56,9 +56,11 @@ def create_app(overrides=None):
     app.register_blueprint(files.bp)
     app.register_blueprint(admin.bp)
     app.register_blueprint(uploads.bp)
+    app.register_blueprint(jobs.bp)
     if schema_ok["value"]:
         with app.app_context():
             uploads.cleanup_abandoned(db.get_db(), app.config)
+            jobs.fail_stale(db.get_db(), app.config)
     cli.register(app)
 
     @app.errorhandler(413)
