@@ -30,13 +30,13 @@
     bar.firstChild.style.width = `${j.status === "done" ? 100 : (pct ?? (j.status === "running" ? 5 : 0))}%`;
     let detail = T(STATUS[j.status] || j.status);
     if (j.status === "running") detail += ` · ${formatBytes(j.done_bytes)}${j.total_bytes ? ` / ${formatBytes(j.total_bytes)}` : ""}`;
-    if (j.status === "done") detail += ` · ${j.name}`;
-    if (j.error && j.status === "failed") detail += ` · ${j.error}`;
+    if (j.status === "done") detail += ` · ⁨${j.name}⁩`;
+    if (j.error && j.status === "failed") detail += ` · ${T(j.error)}`;
     const active = j.status === "queued" || j.status === "running";
     return el("li", { class: "queue-item" },
       el("div", { class: "queue-head" },
         el("span", { class: "queue-name", dir: "ltr", title: j.url, text: j.url }),
-        j.status === "done" && j.file_id ? el("a", { class: "btn btn-sm", href: `/files/${j.file_id}/download`, text: T("Download") }) : null,
+        j.status === "done" && j.file_id ? el("a", { class: "btn btn-sm", href: `/files/${j.file_id}/download` }, SC.icon("download"), el("span", { text: T("Download") })) : null,
         el("button", { type: "button", class: "btn btn-sm", text: active ? T("Cancel") : T("Remove"),
           "aria-label": `${active ? T("Cancel") : T("Remove")}: ${j.url}`,
           onclick: () => api(`/api/fetch/${j.id}`, { method: "DELETE" }).then(refresh).catch((e) => toast(e.message, "error")) })),
@@ -48,7 +48,7 @@
     clearTimeout(timer);
     try {
       const { jobs } = await api("/api/fetch");
-      list.replaceChildren(...(jobs.length ? jobs.map(jobItem) : [el("li", { class: "muted", text: T("No downloads yet.") })]));
+      list.replaceChildren(...(jobs.length ? jobs.map(jobItem) : [el("li", { class: "queue-empty", text: T("No downloads yet.") })]));
       if (jobs.some((j) => j.status === "queued" || j.status === "running")) timer = setTimeout(refresh, 1000);
       else SC.refreshUsage();
     } catch (e) {

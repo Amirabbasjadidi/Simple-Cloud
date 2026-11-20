@@ -29,6 +29,7 @@
   };
 
   function addFiles(files) {
+    document.getElementById("queue-empty").hidden = true;
     for (const file of files) {
       const bar = el("div", { class: "progress", role: "progressbar", "aria-valuemin": 0, "aria-valuemax": 100,
         "aria-valuenow": 0, "aria-label": `${T("Upload progress")}: ${file.name}` }, el("span"));
@@ -39,7 +40,8 @@
       cancelBtn.addEventListener("click", () => cancel(item));
       queueEl.append(el("li", { class: "queue-item" },
         el("div", { class: "queue-head" },
-          el("span", { class: "queue-name", title: file.name, text: file.name }),
+          SC.icon(SC.fileKind ? SC.fileKind({ mime_type: file.type }) : "file"),
+          el("span", { class: "queue-name", dir: "auto", title: file.name, text: file.name }),
           el("span", { class: "muted", text: formatBytes(file.size) }), cancelBtn),
         bar, status));
       queue.push(item);
@@ -60,7 +62,7 @@
     const pct = item.file.size ? Math.floor((done / item.file.size) * 100) : 100;
     item.bar.querySelector("span").style.width = `${pct}%`;
     item.bar.setAttribute("aria-valuenow", String(pct));
-    item.status.textContent = `${pct}% · ${formatBytes(done)} / ${formatBytes(item.file.size)}`;
+    item.status.textContent = `${SC.num(pct)}% · ${formatBytes(done)} / ${formatBytes(item.file.size)}`;
   }
 
   function sendChunk(item, offset, blob) {
@@ -145,7 +147,8 @@
     store.del(key);
     setProgress(item, item.file.size);
     item.bar.classList.add("progress-done");
-    item.status.textContent = `${T("Uploaded")}${f.name !== item.file.name ? ` ${T("as")} “${f.name}”` : ""}`;
+    item.status.textContent = `${T("Uploaded")}${f.name !== item.file.name ? ` ${T("as")} ${SC.quote ? SC.quote(f.name) : f.name}` : ""}`;
+    item.status.className = "queue-status";
     item.cancelBtn.hidden = true;
     SC.refreshUsage();
   }

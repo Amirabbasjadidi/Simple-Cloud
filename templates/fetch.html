@@ -1,28 +1,30 @@
 {% extends "base.html" %}
-{% block title %}Fetch from URL{% endblock %}
+{% block title %}{{ _("Fetch from URL") }}{% endblock %}
 {% block content %}
-<h1>Fetch files from URLs</h1>
+<div class="page-head">
+    <h1>{{ _("Fetch files from URLs") }}</h1>
+</div>
 
 <section class="card" aria-labelledby="fetch-form-title">
-    <h2 id="fetch-form-title" class="sr-only">New download</h2>
+    <h2 id="fetch-form-title" class="sr-only">{{ _("New download") }}</h2>
     <form id="fetch-form" class="form" novalidate>
         <div class="field field-wide">
-            <label for="urls">URLs (one per line)</label>
+            <label for="urls">{{ _("URLs (one per line)") }}</label>
             <textarea id="urls" rows="5" dir="ltr" spellcheck="false" aria-describedby="urls-hint"
                       placeholder="https://example.com/file.zip"></textarea>
-            <small id="urls-hint" class="hint">Downloads run on the server in the background. You can leave this page; progress is kept.</small>
+            <small id="urls-hint" class="hint">{{ _("Downloads run on the server in the background. You can leave this page; progress is kept.") }}</small>
         </div>
         <div class="field">
-            <label for="fetch-folder">Save to</label>
-            <select id="fetch-folder"><option value="">My files</option></select>
+            <label for="fetch-folder">{{ _("Save to") }}</label>
+            <select id="fetch-folder"><option value="">{{ _("My files") }}</option></select>
         </div>
-        <button type="submit" class="btn btn-primary">Start download</button>
+        <div><button type="submit" class="btn btn-primary">{{ icon("download") }}<span>{{ _("Start download") }}</span></button></div>
     </form>
 </section>
 
 <section aria-labelledby="jobs-title">
-    <h2 id="jobs-title">Downloads</h2>
-    <ul id="jobs" class="queue" role="list" aria-live="polite"><li class="muted">Loading…</li></ul>
+    <h2 id="jobs-title">{{ _("Downloads") }}</h2>
+    <ul id="jobs" class="queue" role="list" aria-live="polite"><li class="queue-empty">{{ _("Loading…") }}</li></ul>
 </section>
 {% endblock %}
 {% block scripts %}
