@@ -50,12 +50,68 @@ const SC = (() => {
     const ok = document.getElementById("confirm-ok");
     ok.textContent = confirmText;
     ok.className = `btn ${danger ? "btn-danger" : "btn-primary"}`;
+    const done = openDialog(dlg);
+    dlg.querySelector('button[value="cancel"]').focus();
+    return done;
+  }
+
+  /* Show a modal <dialog> containing a <form>. Resolves true when the form is submitted (Enter or
+     the confirm button), false on Cancel/Escape. Driven by submit/cancel/click events rather than
+     dialog.returnValue or the "close" event, which browsers don't fire consistently. */
+  function openDialog(dlg) {
+    if (dlg._finish) dlg._finish(false);  // a previous use that never settled
     return new Promise((resolve) => {
-      dlg.addEventListener("close", () => resolve(dlg.returnValue === "ok"), { once: true });
-      dlg.returnValue = "cancel";
+      const form = dlg.querySelector("form");
+      let settled = false;
+      const finish = (ok) => {
+        if (settled) return;
+        settled = true;
+        form.removeEventListener("submit", onSubmit);
+        dlg.removeEventListener("cancel", onCancel);
+        dlg.removeEventListener("click", onClick);
+        dlg.removeEventListener("close", onClose);
+        dlg._finish = null;
+        if (dlg.open) dlg.close();
+        resolve(ok);
+      };
+      const onSubmit = (e) => { e.preventDefault(); finish(true); };
+      const onCancel = (e) => { e.preventDefault(); finish(false); };
+      const onClick = (e) => { if (e.target.closest('button[value="cancel"]')) finish(false); };
+      const onClose = () => finish(false);
+      form.addEventListener("submit", onSubmit);
+      dlg.addEventListener("cancel", onCancel);
+      dlg.addEventListener("click", onClick);
+      dlg.addEventListener("close", onClose);
+      dlg._finish = finish;
       dlg.showModal();
-      dlg.querySelector('button[value="cancel"]').focus();
     });
+  }
+
+  /* Text input dialog (value) or select dialog (options: [{value, label}]). Resolves null on cancel. */
+  function promptDialog({ title, label, value = "", options = null, confirmText = "OK" }) {
+    const dlg = document.getElementById("prompt-dialog");
+    const input = document.getElementById("prompt-input");
+    const select = document.getElementById("prompt-select");
+    document.getElementById("prompt-title").textContent = title;
+    document.getElementById("prompt-label").textContent = label;
+    document.getElementById("prompt-ok").textContent = confirmText;
+    input.hidden = !!options;
+    select.hidden = !options;
+    const field = options ? select : input;
+    document.getElementById("prompt-label").htmlFor = field.id;
+    if (options) {
+      select.replaceChildren(...options.map((o) => el("option", { value: o.value, text: o.label })));
+      select.value = value;
+    } else {
+      input.value = value;
+    }
+    const done = openDialog(dlg).then((ok) => (ok ? field.value : null));
+    field.focus();
+    if (!options) {
+      const dot = value.lastIndexOf(".");
+      input.setSelectionRange(0, dot > 0 ? dot : value.length);
+    }
+    return done;
   }
 
   function formatBytes(n) {
@@ -125,5 +181,5 @@ const SC = (() => {
     });
   });
 
-  return { api, toast, confirm: confirmDialog, formatBytes, formatDate, el, csrf, refreshUsage };
+  return { api, toast, confirm: confirmDialog, prompt: promptDialog, openDialog, formatBytes, formatDate, el, csrf, refreshUsage };
 })();

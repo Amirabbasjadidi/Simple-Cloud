@@ -70,10 +70,8 @@
     document.getElementById("delete-summary").textContent =
       `${u.username}: ${u.file_count} ${T("files")}, ${formatBytes(u.used_bytes)}. ${T("This cannot be undone.")}`;
     document.getElementById("delete-files").hidden = u.file_count === 0;
-    dlg.returnValue = "cancel";
-    dlg.showModal();
-    dlg.addEventListener("close", async () => {
-      if (dlg.returnValue !== "ok") return;
+    SC.openDialog(dlg).then(async (ok) => {
+      if (!ok) return;
       const files = dlg.querySelector('input[name="files"]:checked').value;
       try {
         await api(`/api/admin/users/${u.id}`, {
@@ -84,7 +82,7 @@
       } catch (e) {
         toast(e.message, "error");
       }
-    }, { once: true });
+    });
   }
 
   document.getElementById("create-form").addEventListener("submit", async (e) => {

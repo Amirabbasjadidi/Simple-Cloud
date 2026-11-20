@@ -37,8 +37,22 @@
         <h2 id="confirm-title" class="dialog-title"></h2>
         <p id="confirm-message"></p>
         <div class="dialog-actions">
-            <button value="cancel" class="btn">Cancel</button>
+            <button type="button" value="cancel" class="btn">Cancel</button>
             <button value="ok" class="btn btn-primary" id="confirm-ok">OK</button>
+        </div>
+    </form>
+</dialog>
+<dialog id="prompt-dialog" class="dialog" aria-labelledby="prompt-title">
+    <form method="dialog">
+        <h2 id="prompt-title" class="dialog-title"></h2>
+        <div class="field">
+            <label for="prompt-input" id="prompt-label"></label>
+            <input id="prompt-input" autocomplete="off">
+            <select id="prompt-select" hidden></select>
+        </div>
+        <div class="dialog-actions">
+            <button type="button" value="cancel" class="btn">Cancel</button>
+            <button value="ok" class="btn btn-primary" id="prompt-ok">OK</button>
         </div>
     </form>
 </dialog>

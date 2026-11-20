@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Files{% endblock %}
+{% block content %}
+<div class="page-head">
+    <nav aria-label="Folder path" class="breadcrumbs"><ol id="breadcrumbs"></ol></nav>
+    <div class="usage usage-compact" data-usage>
+        <div class="progress" role="progressbar" aria-label="Storage used" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><span></span></div>
+        <p class="usage-text muted"></p>
+    </div>
+</div>
+
+<div class="toolbar" role="toolbar" aria-label="File actions">
+    <div class="search">
+        <label for="search" class="sr-only">Search all files</label>
+        <input id="search" type="search" placeholder="Search all files" autocomplete="off">
+    </div>
+    <label for="sort" class="sr-only">Sort by</label>
+    <select id="sort">
+        <option value="date:desc">Newest first</option>
+        <option value="date:asc">Oldest first</option>
+        <option value="name:asc">Name A–Z</option>
+        <option value="name:desc">Name Z–A</option>
+        <option value="size:desc">Largest first</option>
+        <option value="size:asc">Smallest first</option>
+    </select>
+    <div class="segmented" role="group" aria-label="View">
+        <button type="button" class="btn" data-view="grid" aria-pressed="true">Grid</button>
+        <button type="button" class="btn" data-view="list" aria-pressed="false">List</button>
+    </div>
+    <button type="button" class="btn" id="new-folder">New folder</button>
+    <a class="btn btn-primary" id="upload-here" href="{{ url_for('files.upload_page') }}">Upload</a>
+</div>
+
+<section id="listing" class="listing view-grid" aria-live="polite" aria-busy="true">
+    <p class="state muted">Loading…</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='files.js') }}"></script>
+{% endblock %}
