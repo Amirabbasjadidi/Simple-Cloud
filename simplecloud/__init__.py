@@ -62,6 +62,12 @@ def create_app(overrides=None):
         limit_mb = app.config["MAX_CONTENT_LENGTH"] // (1024 * 1024)
         return jsonify(success=False, error=f"File is too large (max {limit_mb} MB)."), 413
 
+    from .quota import QuotaError
+
+    @app.errorhandler(QuotaError)
+    def over_quota(e):
+        return jsonify(success=False, error=str(e)), 507
+
     @app.errorhandler(CSRFError)
     def csrf_error(e):
         return jsonify(success=False, error="Security token missing or expired. Reload the page."), 400

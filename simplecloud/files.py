@@ -3,7 +3,7 @@ import os
 from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
 
-from . import storage
+from . import quota, storage
 from .db import get_db
 from .events import log_event
 from .fetch import FetchError, fetch_to_file
@@ -70,21 +70,29 @@ def files_page():
     return render_template("filemanager.html")
 
 
-def add_file(user_id, name, write):
-    """Store a new file. `write(path)` puts the bytes at path; `name` may be a callable evaluated
-    after writing (fetch learns the name from the response). Returns (id, final display name)."""
-    db = get_db()
+def add_file(db, user_id, name, write, folder_id=None, exclude_upload=None):
+    """Store a new file for user_id. Usable outside a request (background jobs pass their own db).
+
+    `write(path)` puts the bytes at path; `name` may be a callable evaluated after writing (fetch
+    learns the name from the response). The quota check and the insert share one write
+    transaction, so concurrent uploads can't overshoot the quota. Returns (id, display name).
+    """
     stored = storage.new_stored_name(user_id)
     path = storage.prepare_path(stored)
     try:
         write(path)
         size = os.path.getsize(path)
-        name = storage.unique_name(db, user_id, storage.clean_name(name() if callable(name) else name))
+        db.execute("BEGIN IMMEDIATE")
+        quota.check(db, user_id, size, exclude_upload)
+        name = storage.clean_name(name() if callable(name) else name)
+        name = storage.unique_name(db, user_id, name)
         cur = db.execute(
             "INSERT INTO files (user_id, name, stored_name, size, mime_type) VALUES (?, ?, ?, ?, ?)",
             (user_id, name, stored, size, storage.guess_mime(name)))
         db.commit()
     except BaseException:
+        if db.in_transaction:
+            db.rollback()
         storage.remove_quietly(path)
         raise
     return cur.lastrowid, name
@@ -93,10 +101,14 @@ def add_file(user_id, name, write):
 @bp.route("/upload", methods=["POST"])
 @login_required
 def upload():
+    # Check before touching request.files, which would read the whole body.
+    left = quota.remaining(get_db(), current_user.id)
+    if left is not None and (request.content_length or 0) > left + 64 * 1024:  # multipart overhead
+        raise quota.QuotaError("Not enough storage space: this would exceed your quota.")
     file = request.files.get("file")
     if file is None or file.filename == "":
         return jsonify(success=False, error="No file provided"), 400
-    file_id, name = add_file(current_user.id, file.filename, file.save)
+    file_id, name = add_file(get_db(), current_user.id, file.filename, file.save)
     log_event("upload", user=current_user.username, file_id=file_id, name=name)
     return jsonify(success=True, id=file_id, filename=name)
 
@@ -108,17 +120,26 @@ def download_file_from_url():
     if not url:
         return jsonify(success=False, error="No URL provided"), 400
     hint = {}
+    cfg = dict(current_app.config)
+    left = quota.remaining(get_db(), current_user.id)
+    cfg["FETCH_MAX_BYTES"] = min(x for x in (cfg["FETCH_MAX_BYTES"], cfg["MAX_FILE_SIZE"], left) if x is not None)
 
     def write(path):
-        hint["name"] = fetch_to_file(url, path, current_app.config)[0] or "download"
+        hint["name"] = fetch_to_file(url, path, cfg)[0] or "download"
 
     try:
-        file_id, name = add_file(current_user.id, lambda: hint["name"], write)
+        file_id, name = add_file(get_db(), current_user.id, lambda: hint["name"], write)
     except FetchError as e:
         log_event("fetch_failed", user=current_user.username, url=url, error=e)
         return jsonify(success=False, error=str(e)), 400
     log_event("fetch_ok", user=current_user.username, file_id=file_id, name=name, url=url)
     return jsonify(success=True, id=file_id, filename=name)
+
+
+@bp.route("/api/usage")
+@login_required
+def api_usage():
+    return jsonify(quota.usage(get_db(), current_user.id))
 
 
 @bp.route("/api/files", methods=["GET"])

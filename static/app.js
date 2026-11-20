@@ -85,7 +85,29 @@ const SC = (() => {
     return e;
   }
 
+  async function refreshUsage() {
+    const boxes = document.querySelectorAll("[data-usage]");
+    if (!boxes.length) return;
+    try {
+      const u = await api("/api/usage");
+      const used = u.used + u.reserved;
+      const pct = u.quota ? Math.min(100, Math.round((used / u.quota) * 100)) : 0;
+      const T = SC.t || ((x) => x);
+      for (const box of boxes) {
+        const bar = box.querySelector(".progress");
+        bar.setAttribute("aria-valuenow", String(pct));
+        bar.hidden = !u.quota;
+        bar.classList.toggle("progress-warn", pct >= 90);
+        bar.querySelector("span").style.width = `${pct}%`;
+        box.querySelector(".usage-text").textContent = u.quota
+          ? `${formatBytes(used)} ${T("of")} ${formatBytes(u.quota)} ${T("used")} (${pct}%)`
+          : `${formatBytes(used)} ${T("used")} · ${T("no quota")}`;
+      }
+    } catch (_) { /* usage is informational */ }
+  }
+
   document.addEventListener("DOMContentLoaded", () => {
+    refreshUsage();
     const toggle = document.querySelector(".nav-toggle");
     const nav = document.getElementById("main-nav");
     toggle?.addEventListener("click", () => {
@@ -103,5 +125,5 @@ const SC = (() => {
     });
   });
 
-  return { api, toast, confirm: confirmDialog, formatBytes, formatDate, el, csrf };
+  return { api, toast, confirm: confirmDialog, formatBytes, formatDate, el, csrf, refreshUsage };
 })();
