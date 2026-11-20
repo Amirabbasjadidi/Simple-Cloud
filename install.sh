@@ -153,6 +153,20 @@ set_default MAX_CONTENT_LENGTH 2147483648
 chown root:"$APP_USER" "$ENV_FILE"
 chmod 640 "$ENV_FILE"
 
+# ---------------------------------------------------------------- database backup folder
+# Used by the nightly timer and by "Back up now" in the admin dashboard, which runs inside the
+# main service: both units get write access to it (ProtectSystem=strict makes the rest read-only).
+DB_BACKUP_DIR=$(env_value DB_BACKUP_FOLDER)
+KEEP=$(env_value BACKUP_KEEP)
+mkdir -p "$DB_BACKUP_DIR"
+# On a NAS share ownership comes from the mount options, so a failed chown is not fatal.
+chown "$APP_USER:$APP_USER" "$DB_BACKUP_DIR" 2>/dev/null && chmod 750 "$DB_BACKUP_DIR" || true
+if ! runuser -u "$APP_USER" -- test -w "$DB_BACKUP_DIR"; then
+    MSG="$DB_BACKUP_DIR is not writable by the $APP_USER user (for a CIFS/NFS share, mount it with uid=$APP_USER or matching permissions)"
+    [ "$BACKUP_TIMER" -eq 1 ] && die "$MSG"
+    echo "Warning: $MSG. Database backups will fail until this is fixed; the admin dashboard shows it too."
+fi
+
 # ---------------------------------------------------------------- database (creates or migrates, backs up first)
 log "Database setup / migration"
 cd "$INSTALL_DIR"
@@ -176,7 +190,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=$DATA_DIR
+ReadWritePaths=$DATA_DIR -$DB_BACKUP_DIR
 
 [Install]
 WantedBy=multi-user.target
@@ -226,16 +240,9 @@ systemctl reload nginx
 # ---------------------------------------------------------------- daily database backup (optional)
 # Only the database: uploads are too large to copy every night. A full backup with the uploads
 # is a manual command (`flask backup`), never run by the timer.
-DB_BACKUP_DIR=$(env_value DB_BACKUP_FOLDER)
-KEEP=$(env_value BACKUP_KEEP)
 BACKUP_UNIT=/etc/systemd/system/simplecloud-backup.service
 if [ "$BACKUP_TIMER" -eq 1 ] || [ -f "$BACKUP_UNIT" ]; then
     log "Daily database backup: keeps $KEEP archives in $DB_BACKUP_DIR"
-    mkdir -p "$DB_BACKUP_DIR"
-    # On a NAS share ownership comes from the mount options, so a failed chown is not fatal.
-    chown "$APP_USER:$APP_USER" "$DB_BACKUP_DIR" 2>/dev/null && chmod 750 "$DB_BACKUP_DIR" || true
-    runuser -u "$APP_USER" -- test -w "$DB_BACKUP_DIR" \
-        || die "$DB_BACKUP_DIR is not writable by the $APP_USER user (for a CIFS/NFS share, mount it with uid=$APP_USER or matching permissions)"
     cat > "$BACKUP_UNIT" <<EOF
 [Unit]
 Description=Simple Cloud database backup

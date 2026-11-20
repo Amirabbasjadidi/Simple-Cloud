@@ -166,6 +166,18 @@ sudo systemctl enable --now simplecloud-backup.timer      # turn it back on
 
 Re-running the installer without `--backup-timer` keeps a disabled timer disabled.
 
+### From the admin dashboard
+
+**Admin → System and storage** shows the database backups (newest first, with date and size),
+the retention setting, the time of the last backup with a warning when it is older than 26 hours
+(`BACKUP_MAX_AGE_HOURS`) or missing, and whether the nightly timer is enabled. **Back up now**
+runs the same database-only backup with the same retention, in the background (one at a time).
+
+The app itself writes these backups, so its service must be allowed to write the backup folder.
+The installer grants that (`ReadWritePaths`) for `DB_BACKUP_FOLDER`; if the folder is not writable
+(for example a NAS share mounted with the wrong owner), the dashboard says so and the button is
+disabled.
+
 ### By hand
 
 ```bash

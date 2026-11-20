@@ -6,7 +6,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # Bump together with a new step in migrate.MIGRATIONS. tests/test_migration.py checks that a
 # fresh database (SCHEMA below) and a migrated legacy database end up with the same tables.
-LATEST_VERSION = 3
+LATEST_VERSION = 4
 
 # Tables added in schema v3 (shared by the fresh schema and migrate_v3).
 V3_TABLES = [
@@ -53,6 +53,30 @@ V3_TABLES = [
     "CREATE INDEX idx_shares_file ON shares(file_id)",
 ]
 
+# Tables added in schema v4 (shared by the fresh schema and migrate_v4).
+V4_TABLES = [
+    # A counted share download opens a grant for that client (cookie token or IP) so its range,
+    # parallel-segment and retry requests are neither refused nor counted again.
+    """CREATE TABLE share_grants (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        share_id INTEGER NOT NULL REFERENCES shares(id) ON DELETE CASCADE,
+        token_hash TEXT NOT NULL UNIQUE,
+        ip TEXT NOT NULL,
+        expires_at REAL NOT NULL
+    )""",
+    "CREATE INDEX idx_share_grants_share ON share_grants(share_id, expires_at)",
+    # "Back up now" runs from the admin dashboard (one at a time across workers).
+    """CREATE TABLE backup_runs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        status TEXT NOT NULL,
+        started_at REAL NOT NULL,
+        finished_at REAL,
+        started_by TEXT,
+        path TEXT,
+        error TEXT
+    )""",
+]
+
 SCHEMA = [
     """CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -88,6 +112,7 @@ SCHEMA = [
     "CREATE INDEX idx_files_user ON files(user_id)",
     "CREATE INDEX idx_files_folder ON files(user_id, folder_id)",
     *V3_TABLES,
+    *V4_TABLES,
     """CREATE TABLE captchas (
         token TEXT PRIMARY KEY,
         answer INTEGER NOT NULL,

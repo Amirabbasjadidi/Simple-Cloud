@@ -111,3 +111,12 @@ def test_no_external_assets(app):
     for f in ("fonts/vazirmatn/Vazirmatn-wght.woff2", "fonts/vazirmatn/OFL.txt",
               "fonts/fira-sans/FiraSans-Regular.woff2", "fonts/fira-sans/OFL.txt"):
         assert app.test_client().get("/static/" + f).status_code == 200, f
+
+
+def test_theme_toggle_names_the_action(app):
+    page = app.test_client().get("/login").get_data(as_text=True)
+    button = re.search(r'<button[^>]*data-action="theme".*?</button>', page, re.S).group(0)
+    # both labels are rendered; CSS shows the one for the current theme (no flash before app.js)
+    assert f'data-label-dark="{FA["Dark mode"]}"' in button and f'data-label-light="{FA["Light mode"]}"' in button
+    assert '<span class="theme-dark">' in button and '<span class="theme-light">' in button
+    assert FA["Dark mode"] == "حالت تاریک" and FA["Light mode"] == "حالت روشن"

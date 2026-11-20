@@ -30,7 +30,8 @@ const SC = (() => {
       const err = new Error(data.error ? t(data.error) : `${t("Request failed")} (HTTP ${r.status})`);
       err.status = r.status;
       err.data = data;
-      if (data.must_change_password) window.location.href = "/account";
+      // Never from /account itself: reloading it would loop forever.
+      if (data.must_change_password && window.location.pathname !== "/account") window.location.href = "/account";
       throw err;
     }
     return data;
@@ -192,15 +193,17 @@ const SC = (() => {
 
     // Theme toggle: the choice is remembered per browser; theme.js applies it before first paint.
     const root = document.documentElement;
-    document.querySelectorAll('[data-action="theme"]').forEach((b) => {
-      b.setAttribute("aria-pressed", String(root.dataset.theme === "dark"));
-      b.addEventListener("click", () => {
-        const next = root.dataset.theme === "dark" ? "light" : "dark";
-        root.dataset.theme = next;
-        try { localStorage.setItem("sc.theme", next); } catch (_) { /* storage blocked */ }
-        document.querySelectorAll('[data-action="theme"]').forEach((x) => x.setAttribute("aria-pressed", String(next === "dark")));
-      });
-    });
+    // CSS swaps the visible icon and label; the accessible name is kept in step here.
+    const themeButtons = document.querySelectorAll('[data-action="theme"]');
+    const labelThemeButtons = () => themeButtons.forEach((b) => b.setAttribute("aria-label",
+      root.dataset.theme === "dark" ? b.dataset.labelLight : b.dataset.labelDark));
+    labelThemeButtons();
+    themeButtons.forEach((b) => b.addEventListener("click", () => {
+      const next = root.dataset.theme === "dark" ? "light" : "dark";
+      root.dataset.theme = next;
+      try { localStorage.setItem("sc.theme", next); } catch (_) { /* storage blocked */ }
+      labelThemeButtons();
+    }));
 
     // <details class="menu"> overflow menus: one open at a time; close on outside click or Escape.
     document.addEventListener("click", (e) => {

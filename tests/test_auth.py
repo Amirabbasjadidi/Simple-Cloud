@@ -211,3 +211,35 @@ def test_disabled_user_cannot_login_and_is_signed_out(app):
     conn.commit()
     assert c.get("/files").status_code == 302
     assert login(app, app.test_client(), "alice").status_code == 401
+
+
+def test_forced_password_change_page_does_not_loop(app):
+    """Regression: /account's own requests must not be refused with must_change_password
+    (app.js would then redirect to /account again, forever)."""
+    import re
+    from conftest import add_user, login
+    import sqlite3
+    add_user(app, "alice")
+    conn = sqlite3.connect(app.config["DATABASE"])
+    conn.execute("UPDATE users SET must_change_password = 1 WHERE username = 'alice'")
+    conn.commit()
+    conn.close()
+    c = app.test_client()
+    r = login(app, c, "alice")
+    assert r.json["redirect_url"].endswith("/account")
+    page = c.get("/account")
+    assert page.status_code == 200
+    # every same-origin API the page's scripts call on load must answer normally
+    assert re.search(r"\bdata-usage\b", page.get_data(as_text=True))
+    usage = c.get("/api/usage")
+    assert usage.status_code == 200 and "must_change_password" not in usage.json
+    # everything else stays blocked until the password is changed
+    assert c.get("/files").status_code == 302
+    assert c.get("/api/files").json["must_change_password"]
+    # the client never redirects when it is already on /account
+    assert 'window.location.pathname !== "/account"' in c.get("/static/app.js").get_data(as_text=True)
+
+    assert c.post("/api/account/password", json={"current_password": "pw-xxxxxxxx",
+                                                 "new_password": "new-pass-123"}).json["success"]
+    assert c.get("/files").status_code == 200
+    assert c.get("/api/files").status_code == 200

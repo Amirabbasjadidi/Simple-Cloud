@@ -8,7 +8,7 @@ import os
 import shutil
 import sqlite3
 
-from .db import LATEST_VERSION, V3_TABLES, connect, ensure_admin, schema_version, table_exists
+from .db import LATEST_VERSION, V3_TABLES, V4_TABLES, connect, ensure_admin, schema_version, table_exists
 from .storage import abs_path, guess_mime, new_stored_name
 
 
@@ -235,7 +235,21 @@ def migrate_v3(conn, cfg, dry_run, echo):
     echo(f"v3: admin role given to: {', '.join(admins) or '(no users)'}")
 
 
-MIGRATIONS = {2: migrate_v2, 3: migrate_v3}
+def migrate_v4(conn, cfg, dry_run, echo):
+    if dry_run:
+        echo("v4 DB changes:")
+        echo("  - new table share_grants (download grants for share links)")
+        echo("  - new table backup_runs (\"Back up now\" in the admin dashboard)")
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    for stmt in V4_TABLES:
+        conn.execute(stmt)
+    conn.execute("PRAGMA user_version = 4")
+    conn.execute("COMMIT")
+    echo("v4: added share download grants and backup runs")
+
+
+MIGRATIONS = {2: migrate_v2, 3: migrate_v3, 4: migrate_v4}
 
 
 def run(cfg, dry_run=False, echo=print, logger=None):

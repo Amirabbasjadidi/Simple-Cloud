@@ -55,6 +55,93 @@
         </div>
     </form>
 </dialog>
+
+<section id="system" class="system" aria-labelledby="system-title" aria-busy="true">
+    <div class="page-head">
+        <h2 id="system-title">{{ _("System and storage") }}</h2>
+        <p class="muted hint" id="system-updated"></p>
+    </div>
+    <div id="system-warnings" class="system-warnings" aria-live="polite"></div>
+
+    <div class="system-grid">
+        <section class="card" aria-labelledby="disk-title">
+            <h3 id="disk-title">{{ _("Disk") }}</h3>
+            <div class="stack" id="disk-bar" role="img" aria-label="{{ _('Disk usage') }}">
+                <span class="seg seg-cloud"></span><span class="seg seg-other"></span><span class="seg seg-free"></span>
+            </div>
+            <ul class="legend" role="list">
+                <li><span class="swatch seg-cloud"></span><span>{{ _("Simple Cloud files") }}</span> <strong id="disk-cloud"></strong></li>
+                <li><span class="swatch seg-other"></span><span>{{ _("Other data on this disk") }}</span> <strong id="disk-other"></strong></li>
+                <li><span class="swatch seg-free"></span><span>{{ _("Free") }}</span> <strong id="disk-free"></strong></li>
+            </ul>
+            <p class="muted" id="disk-total"></p>
+        </section>
+
+        <section class="card" aria-labelledby="alloc-title">
+            <h3 id="alloc-title">{{ _("Quota allocation") }}</h3>
+            <dl class="kv">
+                <dt>{{ _("Sum of all quotas") }}</dt><dd id="alloc-quota"></dd>
+                <dt>{{ _("Disk capacity") }}</dt><dd id="alloc-capacity"></dd>
+                <dt>{{ _("Free space plus cloud data") }}</dt><dd id="alloc-available"></dd>
+                <dt>{{ _("Users with unlimited quota") }}</dt><dd id="alloc-unlimited"></dd>
+            </dl>
+        </section>
+
+        <section class="card" aria-labelledby="backups-title">
+            <h3 id="backups-title">{{ _("Database backups") }}</h3>
+            <dl class="kv">
+                <dt>{{ _("Last backup") }}</dt><dd id="bk-last"></dd>
+                <dt>{{ _("Nightly timer") }}</dt><dd id="bk-timer"></dd>
+                <dt>{{ _("Folder") }}</dt><dd id="bk-folder" dir="ltr"></dd>
+                <dt>{{ _("Retention") }}</dt><dd id="bk-keep"></dd>
+            </dl>
+            <div class="backup-actions">
+                <button type="button" class="btn btn-primary" id="backup-now">{{ icon("download") }}<span>{{ _("Back up now") }}</span></button>
+                <p class="muted" id="backup-run" role="status" aria-live="polite"></p>
+            </div>
+            <div class="progress progress-indeterminate" id="backup-progress" hidden><span></span></div>
+            <details class="backup-list">
+                <summary id="bk-count"></summary>
+                <div class="table-wrap">
+                    <table>
+                        <thead><tr><th scope="col">{{ _("File") }}</th><th scope="col">{{ _("Date") }}</th><th scope="col">{{ _("Size") }}</th></tr></thead>
+                        <tbody id="bk-body"></tbody>
+                    </table>
+                </div>
+            </details>
+        </section>
+    </div>
+
+    <section class="card" aria-labelledby="usage-title">
+        <h3 id="usage-title">{{ _("Storage by user") }}</h3>
+        <div class="table-wrap">
+            <table class="table-cards sortable" id="usage-table">
+                <thead>
+                <tr>
+                    <th scope="col" data-sort="username"><button type="button" class="sort">{{ _("User") }}</button></th>
+                    <th scope="col" data-sort="used" aria-sort="descending"><button type="button" class="sort">{{ _("Used") }}</button></th>
+                    <th scope="col" data-sort="quota"><button type="button" class="sort">{{ _("Quota") }}</button></th>
+                    <th scope="col" data-sort="pct_quota"><button type="button" class="sort">{{ _("% of quota") }}</button></th>
+                    <th scope="col" data-sort="pct_disk"><button type="button" class="sort">{{ _("% of disk") }}</button></th>
+                    <th scope="col" data-sort="pct_cloud"><button type="button" class="sort">{{ _("Share of cloud data") }}</button></th>
+                </tr>
+                </thead>
+                <tbody id="usage-body"><tr><td colspan="6" class="muted">{{ _("Loading…") }}</td></tr></tbody>
+            </table>
+        </div>
+    </section>
+
+    <section class="card" aria-labelledby="largest-title">
+        <h3 id="largest-title">{{ _("Largest files") }}</h3>
+        <div class="table-wrap">
+            <table class="table-cards">
+                <thead><tr><th scope="col">{{ _("Name") }}</th><th scope="col">{{ _("Owner") }}</th>
+                    <th scope="col">{{ _("Size") }}</th><th scope="col">{{ _("Uploaded") }}</th></tr></thead>
+                <tbody id="largest-body"></tbody>
+            </table>
+        </div>
+    </section>
+</section>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='admin.js') }}"></script>

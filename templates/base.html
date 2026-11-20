@@ -19,8 +19,11 @@
     <a class="btn btn-sm btn-ghost" href="{{ url_for('i18n.set_language', code=code, next=next_path) }}"
        lang="{{ code }}" hreflang="{{ code }}">{{ icon("language") }}<span>{{ info.name }}</span></a>
     {% endfor %}
-    <button type="button" class="btn btn-sm btn-ghost" data-action="theme" aria-pressed="false">
-        {{ icon("moon", "theme-dark") }}{{ icon("sun", "theme-light") }}<span>{{ _("Dark mode") }}</span>
+    {# The label names the action. Both labels are rendered and CSS shows the one matching the
+       theme theme.js set before first paint, so the right one appears even before app.js runs. #}
+    <button type="button" class="btn btn-sm btn-ghost" data-action="theme"
+            data-label-dark="{{ _('Dark mode') }}" data-label-light="{{ _('Light mode') }}">
+        {{ icon("moon", "theme-dark") }}{{ icon("sun", "theme-light") }}<span class="theme-dark">{{ _("Dark mode") }}</span><span class="theme-light">{{ _("Light mode") }}</span>
     </button>
 </div>
 {%- endmacro %}
