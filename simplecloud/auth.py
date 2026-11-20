@@ -1,3 +1,4 @@
+import logging
 import time
 
 from flask import Blueprint, current_app, jsonify, redirect, render_template, request, url_for
@@ -7,6 +8,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from . import limiter
 from .captcha import consume_captcha, new_captcha
 from .db import get_db
+from .events import log_event
 
 bp = Blueprint("auth", __name__)
 login_manager = LoginManager()
@@ -78,27 +80,27 @@ def login():
     wait = _lockout_remaining(ip, username)
     if wait:
         consume_captcha(None)  # still burn the captcha
-        current_app.logger.warning("login_locked ip=%s username=%r", ip, username)
+        log_event("login_locked", logging.WARNING, user=username, retry_after=wait)
         resp, status = _fail(f"Too many failed attempts. Try again in {wait} seconds.", 429)
         resp.headers["Retry-After"] = str(wait)
         return resp, status
 
     if not consume_captcha(data.get("captcha")):
         _record_failure(ip, username)
-        current_app.logger.warning("login_failed reason=captcha ip=%s username=%r", ip, username)
+        log_event("login_failed", logging.WARNING, user=username, reason="captcha")
         return _fail("Invalid captcha.", 400)
 
     row = get_db().execute("SELECT * FROM users WHERE username = ?", (username,)).fetchone()
     if not check_password_hash(row["password"] if row else _DUMMY_HASH, password) or row is None:
         _record_failure(ip, username)
-        current_app.logger.warning("login_failed reason=credentials ip=%s username=%r", ip, username)
+        log_event("login_failed", logging.WARNING, user=username, reason="credentials")
         return _fail("Invalid username or password.", 401)
 
     db = get_db()
     db.execute("DELETE FROM login_failures WHERE username = ?", (username,))
     db.commit()
     login_user(User(row), remember=bool(data.get("remember_me")))
-    current_app.logger.info("login_ok ip=%s username=%r", ip, username)
+    log_event("login_ok", user=username)
     return jsonify(success=True, redirect_url=url_for("files.upload_page"))
 
 
@@ -111,5 +113,6 @@ def refresh_captcha():
 @bp.route("/logout", methods=["POST"])
 @login_required
 def logout():
+    log_event("logout", user=current_user.username)
     logout_user()
     return jsonify(success=True, redirect_url=url_for("auth.login"))

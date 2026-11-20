@@ -38,6 +38,7 @@ def load_config():
         # Keep on the same filesystem as UPLOAD_FOLDER so migration backups can use hard links.
         "BACKUP_FOLDER": get("BACKUP_FOLDER", os.path.join(ROOT, "backups")),
         "PORT": get_int("PORT", 8000),
+        "LOG_LEVEL": get("LOG_LEVEL", "INFO").upper(),
         # Request body limit for uploads (bytes). Default 2 GiB.
         "MAX_CONTENT_LENGTH": get_int("MAX_CONTENT_LENGTH", 2 * 1024**3),
         # URL fetch limits

@@ -10,6 +10,7 @@ from werkzeug.security import generate_password_hash
 from . import migrate as migrations
 from . import storage
 from .db import LATEST_VERSION, get_db, schema_version
+from .events import log_event
 
 
 def _db():
@@ -45,7 +46,7 @@ def add_user(username, password):
         raise click.ClickException(f"User {username!r} already exists.")
     db.execute("INSERT INTO users (username, password) VALUES (?, ?)", (username, generate_password_hash(password)))
     db.commit()
-    current_app.logger.info("cli_adduser username=%r", username)
+    log_event("cli_adduser", user=username)
     click.echo(f"User {username} added.")
 
 
@@ -61,7 +62,7 @@ def change_password(username, password, force_change):
     db.execute("UPDATE users SET password = ?, must_change_password = ? WHERE id = ?",
                (generate_password_hash(password), int(force_change), user["id"]))
     db.commit()
-    current_app.logger.info("cli_changepassword username=%r", username)
+    log_event("cli_changepassword", user=username)
     click.echo(f"Password for {username} updated.")
 
 
@@ -80,7 +81,7 @@ def change_username(old_username, new_username):
         raise click.ClickException(f"Username {new_username!r} already exists.")
     db.execute("UPDATE users SET username = ? WHERE id = ?", (new_username, user["id"]))
     db.commit()
-    current_app.logger.info("cli_changeusername old=%r new=%r", old_username, new_username)
+    log_event("cli_changeusername", old=old_username, new=new_username)
     click.echo(f"Username changed from {old_username} to {new_username}.")
 
 
@@ -131,7 +132,7 @@ def delete_user(username, files_action, target, yes):
     # Disk files go only after the commit: a crash leaves unreferenced files, never rows without files.
     for name in stored:
         storage.remove_quietly(storage.abs_path(name))
-    current_app.logger.info("cli_deleteuser username=%r files=%s count=%d", username, files_action, count)
+    log_event("cli_deleteuser", user=username, files=files_action, count=count)
     click.echo(summary + ": done.")
 
 

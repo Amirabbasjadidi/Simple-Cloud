@@ -5,6 +5,7 @@ from flask_login import current_user, login_required
 
 from . import storage
 from .db import get_db
+from .events import log_event
 from .fetch import FetchError, fetch_to_file
 
 bp = Blueprint("files", __name__)
@@ -96,7 +97,7 @@ def upload():
     if file is None or file.filename == "":
         return jsonify(success=False, error="No file provided"), 400
     file_id, name = add_file(current_user.id, file.filename, file.save)
-    current_app.logger.info("upload user=%r name=%r", current_user.username, name)
+    log_event("upload", user=current_user.username, file_id=file_id, name=name)
     return jsonify(success=True, id=file_id, filename=name)
 
 
@@ -114,8 +115,9 @@ def download_file_from_url():
     try:
         file_id, name = add_file(current_user.id, lambda: hint["name"], write)
     except FetchError as e:
+        log_event("fetch_failed", user=current_user.username, url=url, error=e)
         return jsonify(success=False, error=str(e)), 400
-    current_app.logger.info("fetch user=%r name=%r", current_user.username, name)
+    log_event("fetch_ok", user=current_user.username, file_id=file_id, name=name, url=url)
     return jsonify(success=True, id=file_id, filename=name)
 
 
@@ -141,7 +143,7 @@ def delete_file(file_id):
     db.execute("DELETE FROM files WHERE id = ?", (file_id,))
     db.commit()
     storage.remove_quietly(storage.abs_path(row["stored_name"]))  # after commit: never a row without its file
-    current_app.logger.info("delete user=%r name=%r", current_user.username, row["name"])
+    log_event("delete", user=current_user.username, file_id=file_id, name=row["name"])
     return jsonify(success=True)
 
 

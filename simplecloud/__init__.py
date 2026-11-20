@@ -1,3 +1,4 @@
+import logging
 import os
 
 from flask import Flask, jsonify
@@ -20,6 +21,9 @@ def create_app(overrides=None):
     app.config.update(load_config())
     if overrides:
         app.config.update(overrides)
+    from flask.logging import default_handler
+    default_handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+    app.logger.setLevel(app.config["LOG_LEVEL"])
     if not app.config.get("SECRET_KEY"):
         raise RuntimeError(
             "SECRET_KEY is not set. Put SECRET_KEY=... in /etc/simplecloud.env "
