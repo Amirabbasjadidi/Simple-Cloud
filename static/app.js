@@ -56,8 +56,9 @@ const SC = (() => {
   }
 
   /* Show a modal <dialog> containing a <form>. Resolves true when the form is submitted (Enter or
-     the confirm button), false on Cancel/Escape. Driven by submit/cancel/click events rather than
-     dialog.returnValue or the "close" event, which browsers don't fire consistently. */
+     the confirm button), false on Cancel/Escape. Driven by submit/cancel/click events, not
+     dialog.returnValue or the "close" event: returnValue is empty after Enter-key submission, and
+     a queued "close" from the previous use can land on the next one. */
   function openDialog(dlg) {
     if (dlg._finish) dlg._finish(false);  // a previous use that never settled
     return new Promise((resolve) => {
@@ -69,7 +70,6 @@ const SC = (() => {
         form.removeEventListener("submit", onSubmit);
         dlg.removeEventListener("cancel", onCancel);
         dlg.removeEventListener("click", onClick);
-        dlg.removeEventListener("close", onClose);
         dlg._finish = null;
         if (dlg.open) dlg.close();
         resolve(ok);
@@ -77,11 +77,9 @@ const SC = (() => {
       const onSubmit = (e) => { e.preventDefault(); finish(true); };
       const onCancel = (e) => { e.preventDefault(); finish(false); };
       const onClick = (e) => { if (e.target.closest('button[value="cancel"]')) finish(false); };
-      const onClose = () => finish(false);
       form.addEventListener("submit", onSubmit);
       dlg.addEventListener("cancel", onCancel);
       dlg.addEventListener("click", onClick);
-      dlg.addEventListener("close", onClose);
       dlg._finish = finish;
       dlg.showModal();
     });

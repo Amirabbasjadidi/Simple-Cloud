@@ -34,7 +34,19 @@
 <section id="listing" class="listing view-grid" aria-live="polite" aria-busy="true">
     <p class="state muted">Loading…</p>
 </section>
+
+<dialog id="preview-dialog" class="dialog dialog-preview" aria-labelledby="preview-title">
+    <form method="dialog">
+        <header class="preview-head">
+            <h2 id="preview-title" class="dialog-title"></h2>
+            <a class="btn btn-sm" id="preview-download" download>Download</a>
+            <button type="button" value="cancel" class="btn btn-sm" aria-label="Close preview">Close</button>
+        </header>
+        <div id="preview-body" class="preview-body"></div>
+    </form>
+</dialog>
 {% endblock %}
 {% block scripts %}
+<script src="{{ url_for('static', filename='preview.js') }}"></script>
 <script src="{{ url_for('static', filename='files.js') }}"></script>
 {% endblock %}

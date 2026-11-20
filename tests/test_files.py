@@ -47,14 +47,17 @@ def test_preview_safe_type_inline(two_users):
     assert "sandbox" in r.headers["Content-Security-Policy"]
 
 
-def test_preview_html_svg_forced_download(two_users):
+def test_preview_html_svg_never_rendered(two_users):
     alice, _ = two_users
     upload(alice, "evil.html", b"<script>alert(1)</script>")
     upload(alice, "evil.svg", b"<svg onload=alert(1)>")
     for fid in _ids(alice):
         r = alice.get(f"/files/{fid}/preview")
-        assert r.headers["Content-Disposition"].startswith("attachment")
-        assert r.mimetype == "application/octet-stream"
+        assert r.mimetype == "text/plain"  # shown as source text, never as HTML/SVG
+        assert "sandbox" in r.headers["Content-Security-Policy"]
+        assert r.headers["X-Content-Type-Options"] == "nosniff"
+        d = alice.get(f"/files/{fid}/download")
+        assert d.headers["Content-Disposition"].startswith("attachment") and d.mimetype == "application/octet-stream"
 
 
 def test_upload_size_limit(make_app):

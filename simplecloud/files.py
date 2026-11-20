@@ -76,19 +76,38 @@ def _folder_name(db, user_id, parent_id, name, exclude_id=None):
     return name
 
 
+# Non-text/* types that are plain text underneath; previewed as text/plain.
+TEXT_LIKE = {"application/json", "application/xml", "application/javascript", "application/x-sh",
+             "application/x-yaml", "application/toml", "application/sql", "application/x-python",
+             "image/svg+xml"}
+
+
+def preview_kind(mime):
+    """image | video | audio | pdf | text | None. Text is always served as text/plain (never rendered)."""
+    if mime in SAFE_INLINE_TYPES and mime.split("/")[0] in ("image", "video", "audio"):
+        return mime.split("/")[0]
+    if mime == "application/pdf":
+        return "pdf"
+    if mime.startswith("text/") or mime in TEXT_LIKE:
+        return "text"
+    return None
+
+
 def _send(row, inline):
     path = storage.abs_path(row["stored_name"])
     if not os.path.isfile(path):
         abort(404)
-    mime = row["mime_type"]
-    if mime in ("text/csv", "text/markdown"):
-        mime = "text/plain"
-    inline = inline and mime in SAFE_INLINE_TYPES
+    kind = preview_kind(row["mime_type"]) if inline else None
+    if kind == "text":
+        mime = "text/plain"  # HTML/SVG/JS source shown as text, never executed (Werkzeug adds charset)
+    elif kind:
+        mime = row["mime_type"]
+    else:
+        mime = "application/octet-stream"
     # download_name with non-ASCII characters is sent as RFC 5987 filename*=UTF-8''...
-    resp = send_file(path, mimetype=mime if inline else "application/octet-stream",
-                     as_attachment=not inline, download_name=row["name"], conditional=True)
+    resp = send_file(path, mimetype=mime, as_attachment=not kind, download_name=row["name"], conditional=True)
     csp = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'"
-    if mime != "application/pdf":  # Chrome's PDF viewer refuses to run in a sandboxed document
+    if kind != "pdf":  # Chrome's PDF viewer refuses to run in a sandboxed document
         csp += "; sandbox"
     resp.headers["Content-Security-Policy"] = csp
     return resp
@@ -97,7 +116,7 @@ def _send(row, inline):
 def file_json(r):
     return {
         "id": r["id"], "name": r["name"], "size": r["size"], "mime_type": r["mime_type"],
-        "created_at": r["created_at"], "folder_id": r["folder_id"],
+        "created_at": r["created_at"], "folder_id": r["folder_id"], "preview_kind": preview_kind(r["mime_type"]),
         "download_url": url_for("files.download", file_id=r["id"]),
         "preview_url": url_for("files.preview", file_id=r["id"]),
     }
