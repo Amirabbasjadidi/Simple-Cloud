@@ -336,5 +336,22 @@
   "Admins only.": "فقط برای مدیران.",
   "The backup folder is not writable by the Simple Cloud service.": "سرویس سیمپل کلاد نمی‌تواند در پوشهٔ پشتیبان بنویسد.",
   "A backup is already running.": "یک پشتیبان‌گیری در حال اجراست.",
-  "interrupted": "قطع شد"
+  "interrupted": "قطع شد",
+  "From %(name)s": "از %(name)s",
+  "+ New user…": "+ کاربر جدید…",
+  "Delete the files permanently": "حذف فایل‌ها برای همیشه",
+  "Enter a username for the new user.": "برای کاربر جدید یک نام کاربری وارد کنید.",
+  "Hide password": "پنهان کردن گذرواژه",
+  "Must change the password at first sign-in": "در اولین ورود باید گذرواژه را تغییر دهد",
+  "Over quota": "فراتر از سهمیه",
+  "Receiver": "گیرنده",
+  "Search users": "جست‌وجوی کاربران",
+  "The new user": "کاربر جدید",
+  "The password must be at least {n} characters.": "گذرواژه باید دست‌کم {n} نویسه باشد.",
+  "Transfer the files to:": "انتقال فایل‌ها به:",
+  "What happens to their files?": "با فایل‌های این کاربر چه شود؟",
+  "{name} has no files. Only the account is deleted.": "{name} هیچ فایلی ندارد. فقط حساب کاربری حذف می‌شود.",
+  "{name} has {count} files ({size}).": "{name} {count} فایل دارد ({size}).",
+  "{name} is now over their quota.": "{name} اکنون از سهمیهٔ خود فراتر رفته است.",
+  "{name} would use {after} of a {quota} quota. The transfer is allowed, but they will be over their quota.": "{name} با این انتقال {after} از سهمیهٔ {quota} را مصرف می‌کند. انتقال مجاز است، اما از سهمیه فراتر می‌رود."
 }
