@@ -519,6 +519,17 @@ tbody th { font-weight: 600; }
   .table-cards td[data-label]::before { content: attr(data-label); color: var(--fg-muted); min-inline-size: 7rem; }
 }
 
+/* ---------- admin: delete-user dialog ---------- */
+.dialog-wide { inline-size: min(520px, calc(100vw - 2 * var(--space-4))); }
+.choice { gap: var(--space-1); }
+.choice-body { display: grid; gap: var(--space-3); padding-inline-start: 28px; padding-block-end: var(--space-2); }
+.choice-body[aria-disabled="true"] { opacity: .55; }
+.new-user { display: grid; gap: var(--space-3); padding: var(--space-3); border: 1px dashed var(--border-strong); border-radius: var(--radius); }
+.password-row { display: flex; gap: var(--space-2); }
+.password-row input { flex: 1; min-inline-size: 0; }
+.password-row .btn[aria-pressed="true"] { background: var(--primary-soft); color: var(--on-primary-soft); }
+.dialog .alert { margin: 0; }
+
 /* ---------- admin: system / storage ---------- */
 .system { margin-block-start: var(--space-6); }
 .system-grid { display: grid; gap: var(--space-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); margin-block-end: var(--space-4); }

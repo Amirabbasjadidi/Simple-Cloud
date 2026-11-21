@@ -35,7 +35,7 @@ which ends up in the shell history).
 | `setadmin --username NAME [--no-admin]` | Give (or with `--no-admin` remove) the admin role. The last admin cannot be removed. |
 | `disable2fa --username NAME` | Turn off two-factor sign-in for someone who lost their phone. |
 | `changeusername --old NAME --new NAME` | Rename a user. Their files stay theirs. |
-| `deleteuser --username NAME [--files transfer --to OTHER \| --files delete] [--yes]` | Delete a user. A user who owns files needs `--files`: transfer them to another user, or delete them permanently. Asks for confirmation unless `--yes`. |
+| `deleteuser --username NAME [--files transfer --to OTHER \| --files delete] [--yes]` | Delete a user. A user who owns files needs `--files`: transfer them to another user (they land in a new folder "From NAME" in the receiver's files, with the original folders inside), or delete them permanently. The web admin panel can also transfer to a new user it creates in the same step. Asks for confirmation unless `--yes`. |
 | `listusers` | List users with id, admin and disabled flags, file count and bytes used. |
 | `backup --db-only [--output-dir DIR] [--keep N]` | Write `simplecloud-db-YYYYmmdd-HHMMSS.tar.gz` with only a database snapshot, into `DB_BACKUP_FOLDER`. This is what the nightly timer runs. |
 | `backup [--output-dir DIR] [--keep N]` | Full backup: `simplecloud-YYYYmmdd-HHMMSS.tar.gz` with the database snapshot and all uploads, into `BACKUP_FOLDER`. Manual only. |

@@ -55,7 +55,9 @@ def test_deleteuser_transfer(two_users, app):
     upload(alice, "a.txt", b"data")
     r = run(app, "deleteuser", "--username", "alice", "--files", "transfer", "--to", "bob", "--yes")
     assert r.exit_code == 0, r.output
-    files = bob.get("/api/files").json["files"]
+    [folder] = bob.get("/api/files").json["folders"]
+    assert folder["name"] == "From alice"  # the CLI has no request language: English
+    files = bob.get(f"/api/files?folder={folder['id']}").json["files"]
     assert [f["name"] for f in files] == ["a.txt"]
     assert bob.get(files[0]["download_url"]).data == b"data"
 

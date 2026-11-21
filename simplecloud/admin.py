@@ -4,7 +4,7 @@ import secrets
 from flask import Blueprint, abort, current_app, jsonify, render_template, request
 from flask_login import current_user, login_required
 
-from . import system, users
+from . import quota, system, users
 from .db import get_db
 from .events import log_event
 
@@ -146,18 +146,33 @@ def delete_user(user_id):
         return jsonify(success=False, error="You cannot delete your own account."), 400
     if user["is_admin"] and not _other_active_admins(db, user_id):
         return jsonify(success=False, error="Cannot delete the last admin."), 400
-    target = None
-    if data.get("files") == "transfer":
-        target = db.execute("SELECT * FROM users WHERE username = ?", (str(data.get("to") or ""),)).fetchone()
-        if target is None:
-            return jsonify(success=False, error="The user to receive the files does not exist."), 400
+    has_files = db.execute("SELECT 1 FROM files WHERE user_id = ? LIMIT 1", (user_id,)).fetchone()
+    action = data.get("files") if has_files else None  # nothing to transfer: ignore files/to/new_user
+    target = new_user = None
+    if action == "transfer":
+        spec = data.get("new_user")
+        if isinstance(spec, dict):
+            new_user = {"username": str(spec.get("username") or ""), "password": str(spec.get("password") or ""),
+                        "must_change": bool(spec.get("must_change_password", True))}
+        else:
+            to = str(data.get("to") or "").strip()
+            if not to:
+                return jsonify(success=False, error="Choose a user to receive the files."), 400
+            target = db.execute("SELECT * FROM users WHERE username = ?", (to,)).fetchone()
+            if target is None:
+                return jsonify(success=False, error="The user to receive the files does not exist."), 400
     try:
-        count = users.delete_user(db, user, data.get("files"), target)
+        count = users.delete_user(db, user, action, target, new_user)
     except users.UserError as e:
         return jsonify(success=False, error=str(e)), 400
-    log_event("admin_delete_user", admin=current_user.username, user=user["username"],
-              files=data.get("files"), count=count)
-    return jsonify(success=True)
+    result = {"success": True}
+    if action == "transfer":
+        name = new_user["username"].strip() if new_user else target["username"]
+        u = quota.usage(db, db.execute("SELECT id FROM users WHERE username = ?", (name,)).fetchone()[0])
+        result.update(receiver=name, over_quota=bool(u["quota"]) and u["used"] > u["quota"])
+    log_event("admin_delete_user", admin=current_user.username, user=user["username"], files=action,
+              count=count, to=result.get("receiver"), new_user=bool(new_user))
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------- system / storage dashboard

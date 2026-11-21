@@ -3,11 +3,13 @@
 (() => {
   const { api, toast, el, formatBytes } = SC;
   const tbody = document.getElementById("users-body");
-  const T = (s) => (SC.t ? SC.t(s) : s);
+  const T = SC.t;
+  let allUsers = [];
 
   async function load() {
     try {
       const { users } = await api("/api/admin/users");
+      allUsers = users;
       tbody.replaceChildren(...users.map(row));
     } catch (e) {
       tbody.replaceChildren(el("tr", {}, el("td", { colspan: 6, class: "error", text: e.message })));
@@ -62,29 +64,144 @@
       el("th", { scope: "row" }, el("span", { dir: "auto", text: u.username }), u.is_self ? el("span", { class: "muted", text: ` (${T("you")})` }) : null),
       el("td", { "data-label": T("Role") }, el("span", { class: `badge ${u.is_admin ? "badge-primary" : ""}`, text: u.is_admin ? T("Admin") : T("User") })),
       el("td", { "data-label": T("Status") }, el("span", { class: `badge ${status[1]}`, text: T(status[0]) })),
-      el("td", { "data-label": T("Usage"), text: usage }),
+      el("td", { "data-label": T("Usage") }, el("span", { text: usage }),
+        u.quota_bytes && u.used_bytes > u.quota_bytes ? el("span", { class: "badge badge-danger", text: T("Over quota") }) : null),
       el("td", { "data-label": T("Quota (MB)") }, quota),
       el("td", {}, actions));
   }
 
-  function remove(u) {
-    const dlg = document.getElementById("delete-dialog");
-    document.getElementById("delete-summary").textContent =
-      `${u.username}: ${SC.num(u.file_count)} ${T("files")}${SC.lang === "fa" ? "،" : ","} ${formatBytes(u.used_bytes)}. ${T("This cannot be undone.")}`;
-    document.getElementById("delete-files").hidden = u.file_count === 0;
-    SC.openDialog(dlg).then(async (ok) => {
-      if (!ok) return;
-      const files = dlg.querySelector('input[name="files"]:checked').value;
-      try {
-        await api(`/api/admin/users/${u.id}`, {
-          method: "DELETE", json: { files, to: document.getElementById("delete-to").value.trim() },
-        });
-        toast(T("User deleted."), "success");
-        load();
-      } catch (e) {
-        toast(e.message, "error");
+  /* ---------- delete-user dialog ---------- */
+  const NEW = "__new__";  // the "+ New user…" option
+  const $ = (id) => document.getElementById(id);
+  const dlg = $("delete-dialog");
+  const select = $("delete-to");
+  const search = $("delete-search");
+  const minPassword = Number($("nu-password").getAttribute("minlength")) || 8;
+  const defaultQuota = Number(dlg.dataset.defaultQuota) || null;
+  let deleting = null;  // the user row being deleted
+  let candidates = [];
+
+  const iso = (s) => `⁨${s}⁩`;  // keeps a Latin username in place inside a Persian sentence
+  const mode = () => dlg.querySelector('input[name="files"]:checked').value;
+  const receiver = () => candidates.find((c) => String(c.id) === select.value) || null;
+
+  function fillSelect() {
+    const term = search.value.trim().toLowerCase();
+    const keep = select.value;
+    const shown = candidates.filter((c) => !term || c.username.toLowerCase().includes(term));
+    // Option text cannot hold markup, so the admin "badge" is a text suffix.
+    select.replaceChildren(el("option", { value: NEW, text: T("+ New user…") }),
+      ...shown.map((c) => el("option", { value: String(c.id), dir: "auto",
+        text: c.username + (c.is_admin ? ` · ${T("Admin")}` : "") + (c.disabled ? ` · ${T("Disabled")}` : "") })));
+    if ([...select.options].some((o) => o.value === keep)) select.value = keep;
+    else if (term && shown.length) select.value = String(shown[0].id);
+    sync();
+  }
+
+  function sync() {
+    const transfer = mode() === "transfer";
+    const isNew = select.value === NEW;
+    $("transfer-box").setAttribute("aria-disabled", String(!transfer));
+    for (const f of $("transfer-box").querySelectorAll("input, select, button")) f.disabled = !transfer;
+    $("new-user-fields").hidden = !isNew;
+    // Quota preview: the transfer is allowed, but say so before confirming.
+    const warn = $("delete-quota-warning");
+    const r = receiver();
+    const quota = isNew ? defaultQuota : r?.quota_bytes;
+    const after = (isNew ? 0 : r?.used_bytes || 0) + deleting.used_bytes;
+    const over = transfer && quota && after > quota;
+    warn.hidden = !over;
+    if (over) {
+      warn.replaceChildren(SC.icon("alert"), el("span", { text: T("{name} would use {after} of a {quota} quota. The transfer is allowed, but they will be over their quota.", {
+        name: iso(isNew ? ($("nu-username").value.trim() || T("The new user")) : r.username),
+        after: formatBytes(after), quota: formatBytes(quota) }) }));
+    }
+  }
+
+  function showError(msg) {
+    $("delete-error").textContent = msg || "";
+    $("delete-error").hidden = !msg;
+  }
+
+  function body() {
+    if (!deleting.file_count) return {};  // nothing to move: just delete
+    if (mode() === "delete") return { files: "delete" };
+    if (select.value !== NEW) return { files: "transfer", to: receiver().username };
+    return { files: "transfer", new_user: { username: $("nu-username").value.trim(), password: $("nu-password").value,
+      must_change_password: $("nu-must-change").checked } };
+  }
+
+  function check(b) {  // the server checks again; this only saves a round trip. Returns [message, field].
+    for (const id of ["nu-username", "nu-password"]) $(id).removeAttribute("aria-invalid");
+    if (!b.new_user) return null;
+    if (!b.new_user.username) return [T("Enter a username for the new user."), $("nu-username")];
+    if (b.new_user.password.length < minPassword) {
+      return [T("The password must be at least {n} characters.", { n: SC.num(minPassword) }), $("nu-password")];
+    }
+    return null;
+  }
+
+  dlg.querySelectorAll('input[name="files"]').forEach((r) => r.addEventListener("change", sync));
+  select.addEventListener("change", () => { sync(); if (select.value === NEW) $("nu-username").focus(); });
+  search.addEventListener("input", fillSelect);
+  $("nu-username").addEventListener("input", sync);
+  $("nu-show").addEventListener("click", (e) => {
+    const b = e.currentTarget;
+    const show = b.getAttribute("aria-pressed") !== "true";
+    $("nu-password").type = show ? "text" : "password";
+    b.setAttribute("aria-pressed", String(show));
+    b.setAttribute("aria-label", show ? T("Hide password") : T("Show password"));
+    b.title = b.getAttribute("aria-label");
+  });
+
+  async function remove(u) {
+    deleting = u;
+    const hasFiles = u.file_count > 0;
+    $("delete-summary").textContent = hasFiles
+      ? `${T("{name} has {count} files ({size}).", { name: iso(u.username), count: SC.num(u.file_count), size: formatBytes(u.used_bytes) })} ${T("This cannot be undone.")}`
+      : `${T("{name} has no files. Only the account is deleted.", { name: iso(u.username) })} ${T("This cannot be undone.")}`;
+    $("delete-files").hidden = !hasFiles;
+    // fresh state for every user
+    dlg.querySelector('input[name="files"][value="transfer"]').checked = true;
+    search.value = "";
+    $("nu-username").value = "";
+    $("nu-password").value = "";
+    $("nu-password").type = "password";
+    $("nu-show").setAttribute("aria-pressed", "false");
+    $("nu-must-change").checked = true;
+    showError("");
+    candidates = allUsers.filter((c) => c.id !== u.id)
+      .sort((a, b) => a.username.localeCompare(b.username, SC.lang));
+    $("delete-search-field").hidden = candidates.length <= 8;
+    select.value = "";
+    fillSelect();
+    if (candidates.length) select.value = String(candidates[0].id);  // an existing user is the usual choice
+    sync();
+    // The dialog stays open after an error so nothing typed is lost; Cancel/Escape leaves it.
+    let focusOnOpen = null;
+    for (;;) {
+      const answered = SC.openDialog(dlg);  // showModal() has run when this returns
+      if (focusOnOpen) { focusOnOpen.focus(); focusOnOpen = null; }
+      if (!(await answered)) break;
+      const b = body();
+      const problem = check(b);
+      if (problem) {
+        showError(problem[0]);
+        problem[1].setAttribute("aria-invalid", "true");
+        focusOnOpen = problem[1];
+        continue;
       }
-    });
+      try {
+        const r = await api(`/api/admin/users/${u.id}`, { method: "DELETE", json: b });
+        toast(T("User deleted."), "success");
+        if (r.over_quota) toast(T("{name} is now over their quota.", { name: iso(r.receiver) }), "error", 8000);
+        load();
+        break;
+      } catch (e) {
+        showError(e.message);
+        focusOnOpen = $("delete-error");  // brings it into view in a tall dialog; role=alert reads it
+      }
+    }
   }
 
   document.getElementById("create-form").addEventListener("submit", async (e) => {

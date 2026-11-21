@@ -39,19 +39,49 @@
     </div>
 </section>
 
-<dialog id="delete-dialog" class="dialog" aria-labelledby="delete-title">
-    <form method="dialog" id="delete-form">
+<dialog id="delete-dialog" class="dialog dialog-wide" aria-labelledby="delete-title" aria-describedby="delete-summary"
+        data-default-quota="{{ config.DEFAULT_QUOTA_BYTES }}">
+    <form method="dialog" id="delete-form" novalidate>
         <h2 id="delete-title" class="dialog-title">{{ _("Delete user") }}</h2>
         <p id="delete-summary"></p>
-        <fieldset id="delete-files">
-            <legend>{{ _("Their files") }}</legend>
-            <label class="check"><input type="radio" name="files" value="transfer" checked> {{ _("Transfer to") }}</label>
-            <input id="delete-to" aria-label="{{ _('Username to receive the files') }}" dir="auto">
-            <label class="check"><input type="radio" name="files" value="delete"> {{ _("Delete permanently") }}</label>
+        <fieldset id="delete-files" class="choice">
+            <legend>{{ _("What happens to their files?") }}</legend>
+            <label class="check"><input type="radio" name="files" value="transfer" checked> {{ _("Transfer the files to:") }}</label>
+            <div class="choice-body" id="transfer-box">
+                <div class="field" id="delete-search-field" hidden>
+                    <label for="delete-search" class="sr-only">{{ _("Search users") }}</label>
+                    <div class="input-group">{{ icon("search") }}<input id="delete-search" type="search" autocomplete="off"
+                         placeholder="{{ _('Search users') }}" dir="auto"></div>
+                </div>
+                <div class="field">
+                    <label for="delete-to">{{ _("Receiver") }}</label>
+                    <select id="delete-to"></select>
+                </div>
+                <div id="new-user-fields" class="new-user" hidden>
+                    <div class="field">
+                        <label for="nu-username">{{ _("Username") }}</label>
+                        <input id="nu-username" autocomplete="off" autocapitalize="none" spellcheck="false" dir="auto">
+                    </div>
+                    <div class="field">
+                        <label for="nu-password">{{ _("Password") }}</label>
+                        <div class="password-row">
+                            <input id="nu-password" type="password" autocomplete="new-password" dir="ltr"
+                                   minlength="{{ config.MIN_PASSWORD_LENGTH }}" aria-describedby="nu-password-hint">
+                            <button type="button" class="btn btn-icon" id="nu-show" aria-pressed="false"
+                                    aria-label="{{ _('Show password') }}" title="{{ _('Show password') }}">{{ icon("eye") }}</button>
+                        </div>
+                        <small id="nu-password-hint" class="hint">{{ _("At least %(n)s characters.", n=config.MIN_PASSWORD_LENGTH) }}</small>
+                    </div>
+                    <label class="check"><input id="nu-must-change" type="checkbox" checked> {{ _("Must change the password at first sign-in") }}</label>
+                </div>
+                <div id="delete-quota-warning" class="alert" role="status" hidden></div>
+            </div>
+            <label class="check"><input type="radio" name="files" value="delete"> {{ _("Delete the files permanently") }}</label>
         </fieldset>
+        <p id="delete-error" class="alert alert-error" role="alert" tabindex="-1" hidden></p>
         <div class="dialog-actions">
             <button type="button" value="cancel" class="btn">{{ _("Cancel") }}</button>
-            <button value="ok" class="btn btn-danger">{{ _("Delete user") }}</button>
+            <button value="ok" class="btn btn-danger" id="delete-ok">{{ _("Delete user") }}</button>
         </div>
     </form>
 </dialog>

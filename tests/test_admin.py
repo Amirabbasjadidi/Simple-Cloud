@@ -74,7 +74,10 @@ def test_delete_user_transfer_and_delete(app):
     assert r.status_code == 400  # has files: must choose
     r = boss.delete(f"/api/admin/users/{users['alice']['id']}", json={"files": "transfer", "to": "boss"})
     assert r.json["success"]
-    assert [f["name"] for f in boss.get("/api/files").json["files"]] == ["a.txt"]
+    root = boss.get("/api/files").json
+    assert root["files"] == [] and [f["name"] for f in root["folders"]] == ["از alice"]  # request language: fa
+    inside = boss.get(f"/api/files?folder={root['folders'][0]['id']}").json
+    assert [f["name"] for f in inside["files"]] == ["a.txt"]
 
 
 def test_quota_validation(app):
