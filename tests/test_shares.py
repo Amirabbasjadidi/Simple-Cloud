@@ -187,3 +187,37 @@ def test_password_share_grant_cookie_vs_ip(two_users, app):
     assert fresh.get(f"/s/{t}/download", headers={"Range": "bytes=2-"}).status_code == 206
     # same IP without cookie or password: not counted again, but the password still applies
     assert _client(app, "10.4.4.4").get(f"/s/{t}/download").status_code == 403
+
+
+def test_login_required_share(two_users, app):
+    alice, bob = two_users
+    _, share = make_share(alice, login_required=True)
+    t = token(share)
+    assert share["login_required"] is True
+    anon = app.test_client()
+    assert "/login" in anon.get(f"/s/{t}").get_data(as_text=True)
+    r = anon.get(f"/s/{t}/download")
+    assert r.status_code == 302 and "/login" in r.headers["Location"]
+    assert anon.get(f"/s/{t}/view").status_code == 302
+    assert bob.get(f"/s/{t}/download").data == b"%PDF-data"
+    # Signing in from the share page comes back to it.
+    from conftest import add_user, captcha_answer
+    add_user(app, "carol")
+    anon.get(r.headers["Location"])
+    back = anon.post("/login", json={"username": "carol", "password": "pw-" + "x" * 8,
+                                     "captcha": captcha_answer(app, anon)})
+    assert back.json["redirect_url"] == f"/s/{t}"
+
+
+def test_view_online_counts_as_download(two_users, app):
+    alice, _ = two_users
+    _, share = make_share(alice, max_downloads=1)
+    t = token(share)
+    viewer = _client(app, "10.0.0.1")
+    assert 'id="share-view"' in viewer.get(f"/s/{t}").get_data(as_text=True)
+    r = viewer.get(f"/s/{t}/view")
+    assert r.data == b"%PDF-data" and r.headers["Content-Disposition"].startswith("inline")
+    assert viewer.get(f"/s/{t}/view", headers={"Range": "bytes=2-"}).status_code == 206  # player range: not counted
+    assert viewer.get(f"/s/{t}/download").status_code == 200  # same grant
+    assert alice.get("/api/shares").json["shares"][0]["download_count"] == 1
+    assert _client(app, "10.0.0.2").get(f"/s/{t}/view").status_code == 410  # no way around the limit

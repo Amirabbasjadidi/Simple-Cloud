@@ -5,7 +5,7 @@ from flask import Blueprint, abort, current_app, jsonify, render_template, reque
 from flask_login import current_user, login_required
 
 from . import quota, system, users
-from .db import get_db
+from .db import get_db, get_setting, set_setting
 from .events import log_event
 
 bp = Blueprint("admin", __name__)
@@ -75,6 +75,7 @@ def list_users():
         "disabled": bool(r["disabled"]), "quota_bytes": r["quota_bytes"], "used_bytes": r["used_bytes"],
         "file_count": r["file_count"], "totp_enabled": bool(r["totp_secret"]),
         "must_change_password": bool(r["must_change_password"]), "is_self": r["id"] == current_user.id,
+        "fetch_unlimited": bool(r["fetch_unlimited"]),
     } for r in rows])
 
 
@@ -121,6 +122,8 @@ def update_user(user_id):
             db.execute("UPDATE users SET is_admin = ? WHERE id = ?", (int(make_admin), user_id))
         if "quota_mb" in data:
             db.execute("UPDATE users SET quota_bytes = ? WHERE id = ?", (_quota(data), user_id))
+        if "fetch_unlimited" in data:
+            db.execute("UPDATE users SET fetch_unlimited = ? WHERE id = ?", (int(bool(data["fetch_unlimited"])), user_id))
         if data.get("reset_2fa"):
             db.execute("UPDATE users SET totp_secret = NULL, totp_pending_secret = NULL WHERE id = ?", (user_id,))
         db.commit()
@@ -173,6 +176,34 @@ def delete_user(user_id):
     log_event("admin_delete_user", admin=current_user.username, user=user["username"], files=action,
               count=count, to=result.get("receiver"), new_user=bool(new_user))
     return jsonify(result)
+
+
+# ---------------------------------------------------------------- settings
+
+@bp.route("/api/admin/settings")
+@admin_api
+def get_settings():
+    limit = int(get_setting(get_db(), "fetch_limit_bytes", 0))
+    return jsonify(fetch_limit_mb=limit // (1024 * 1024) or None)
+
+
+@bp.route("/api/admin/settings", methods=["PATCH"])
+@admin_api
+def update_settings():
+    data = request.get_json(silent=True) or {}
+    db = get_db()
+    if "fetch_limit_mb" in data:
+        mb = data["fetch_limit_mb"]
+        try:
+            mb = int(mb) if mb not in (None, "") else 0
+        except (TypeError, ValueError):
+            mb = -1
+        if mb < 0:
+            return jsonify(success=False, error="The limit must be a whole number of MB."), 400
+        set_setting(db, "fetch_limit_bytes", mb * 1024 * 1024 or None)
+    db.commit()
+    log_event("admin_update_settings", admin=current_user.username, changes=",".join(sorted(data)))
+    return jsonify(success=True)
 
 
 # ---------------------------------------------------------------- system / storage dashboard

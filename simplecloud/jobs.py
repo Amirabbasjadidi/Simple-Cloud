@@ -17,7 +17,7 @@ from flask import Blueprint, current_app, jsonify, request
 from flask_login import current_user, login_required
 
 from . import quota, storage
-from .db import connect, get_db
+from .db import connect, get_db, get_setting
 from .events import log_event
 from .fetch import FetchError, fetch_to_file
 from .files import ApiError, add_file, owned_folder
@@ -86,7 +86,7 @@ def _run(app, job_id):
         cfg = app.config
         db = connect(cfg["DATABASE"])
         try:
-            job = db.execute("SELECT j.*, u.username FROM jobs j JOIN users u ON u.id = j.user_id WHERE j.id = ?",
+            job = db.execute("SELECT j.*, u.username, u.fetch_unlimited FROM jobs j JOIN users u ON u.id = j.user_id WHERE j.id = ?",
                              (job_id,)).fetchone()
             if job is None or job["status"] != "queued":
                 return
@@ -96,7 +96,8 @@ def _run(app, job_id):
             db.commit()
             limits = dict(cfg)
             left = quota.remaining(db, job["user_id"])
-            cap = min(x for x in (cfg["FETCH_MAX_BYTES"], cfg["MAX_FILE_SIZE"]) if x)
+            admin_cap = None if job["fetch_unlimited"] else int(get_setting(db, "fetch_limit_bytes", 0))
+            cap = min(x for x in (cfg["FETCH_MAX_BYTES"], cfg["MAX_FILE_SIZE"], admin_cap) if x)
             quota_bound = left is not None and left < cap  # the user's free space is the tighter limit
             limits["FETCH_MAX_BYTES"] = left if quota_bound else cap
             last = [0.0]

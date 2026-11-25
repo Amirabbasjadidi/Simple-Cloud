@@ -353,5 +353,22 @@
   "{name} has no files. Only the account is deleted.": "{name} هیچ فایلی ندارد. فقط حساب کاربری حذف می‌شود.",
   "{name} has {count} files ({size}).": "{name} {count} فایل دارد ({size}).",
   "{name} is now over their quota.": "{name} اکنون از سهمیهٔ خود فراتر رفته است.",
-  "{name} would use {after} of a {quota} quota. The transfer is allowed, but they will be over their quota.": "{name} با این انتقال {after} از سهمیهٔ {quota} را مصرف می‌کند. انتقال مجاز است، اما از سهمیه فراتر می‌رود."
+  "{name} would use {after} of a {quota} quota. The transfer is allowed, but they will be over their quota.": "{name} با این انتقال {after} از سهمیهٔ {quota} را مصرف می‌کند. انتقال مجاز است، اما از سهمیه فراتر می‌رود.",
+  "Only signed-in users can download this file.": "فقط کاربرانی که وارد حساب خود شده‌اند می‌توانند این فایل را دانلود کنند.",
+  "Sign in to download": "برای دانلود وارد شوید",
+  "View online": "مشاهدهٔ آنلاین",
+  "Viewing online uses one download, like the download button.": "مشاهدهٔ آنلاین هم مثل دکمهٔ دانلود، یک بار از سهمیهٔ دانلود کم می‌کند.",
+  "Only signed-in users": "فقط کاربران واردشده",
+  "People without an account on this server cannot download it.": "کسانی که روی این سرور حساب کاربری ندارند نمی‌توانند آن را دانلود کنند.",
+  "Signed-in users only": "فقط کاربران واردشده",
+  "URL download limit": "محدودیت دانلود از لینک",
+  "Download from URL": "دانلود از لینک",
+  "Size limit per download (MB)": "حداکثر حجم هر دانلود (مگابایت)",
+  "No limit": "بدون محدودیت",
+  "Save": "ذخیره",
+  "Empty = no limit: only each user's free space counts. Users ticked “No limit” in the list above are never limited.": "خالی = بدون محدودیت: فقط فضای خالی هر کاربر ملاک است. کاربرانی که در فهرست بالا «بدون محدودیت» برایشان تیک خورده، هیچ‌وقت محدود نمی‌شوند.",
+  "URL download limit updated.": "محدودیت دانلود از لینک به‌روز شد.",
+  "No URL download limit for": "بدون محدودیت دانلود از لینک برای",
+  "Settings saved.": "تنظیمات ذخیره شد.",
+  "The limit must be a whole number of MB.": "محدودیت باید عددی صحیح بر حسب مگابایت باشد."
 }

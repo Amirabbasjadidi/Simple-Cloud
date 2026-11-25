@@ -578,6 +578,10 @@ details > summary { cursor: pointer; color: var(--primary); }
 .captcha-row img { block-size: 56px; inline-size: auto; flex: none; border-radius: var(--radius); border: 1px solid var(--border-strong); background: #fff; }
 .form-row { display: flex; flex-wrap: wrap; justify-content: space-between; gap: var(--space-2); }
 .share-name { overflow-wrap: anywhere; }
+.auth-card.is-viewing { inline-size: min(960px, 100%); }
+.share-actions { display: grid; gap: var(--space-2); }
+.share-actions .hint { margin: 0; text-align: center; }
+.share-viewer { margin-block-start: var(--space-4); }
 .share-brand { margin-block-start: var(--space-5); text-align: center; font-size: var(--text-sm); }
 
 /* ---------- motion ---------- */

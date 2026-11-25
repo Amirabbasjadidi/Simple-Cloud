@@ -6,7 +6,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # Bump together with a new step in migrate.MIGRATIONS. tests/test_migration.py checks that a
 # fresh database (SCHEMA below) and a migrated legacy database end up with the same tables.
-LATEST_VERSION = 4
+LATEST_VERSION = 5
 
 # Tables added in schema v3 (shared by the fresh schema and migrate_v3).
 V3_TABLES = [
@@ -77,6 +77,16 @@ V4_TABLES = [
     )""",
 ]
 
+# Schema v5 steps (run by both the fresh schema and migrate_v5).
+V5_STEPS = [
+    # Admin settings changed from the dashboard (key -> text value).
+    "CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT)",
+    # Exempt from the admin's URL-download size limit (the user's quota still applies).
+    "ALTER TABLE users ADD COLUMN fetch_unlimited INTEGER NOT NULL DEFAULT 0",
+    # Share link usable only by signed-in users.
+    "ALTER TABLE shares ADD COLUMN login_required INTEGER NOT NULL DEFAULT 0",
+]
+
 SCHEMA = [
     """CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,6 +136,7 @@ SCHEMA = [
     )""",
     "CREATE INDEX idx_login_failures_ip ON login_failures(ip, ts)",
     "CREATE INDEX idx_login_failures_user ON login_failures(username, ts)",
+    *V5_STEPS,
 ]
 
 
@@ -134,6 +145,19 @@ def connect(path):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
+
+def get_setting(db, key, default=None):
+    row = db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    return default if row is None else row[0]
+
+
+def set_setting(db, key, value):
+    if value is None:
+        db.execute("DELETE FROM settings WHERE key = ?", (key,))
+    else:
+        db.execute("INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                   (key, str(value)))
 
 
 def get_db():

@@ -34,6 +34,7 @@
     else if (s.expires_at) parts.push(`${T("Expires")} ${new Date(s.expires_at * 1000).toLocaleString(document.documentElement.lang || undefined)}`);
     else parts.push(T("Never expires"));
     if (s.has_password) parts.push(T("Password"));
+    if (s.login_required) parts.push(T("Signed-in users only"));
     parts.push(s.max_downloads ? `${SC.num(s.download_count)}/${SC.num(s.max_downloads)} ${T("downloads")}` : `${SC.num(s.download_count)} ${T("downloads")}`);
     return parts.join(" · ");
   }
@@ -77,6 +78,7 @@
             expires_hours: document.getElementById("share-expiry").value || null,
             password: document.getElementById("share-pass").value,
             max_downloads: document.getElementById("share-max").value || null,
+            login_required: document.getElementById("share-login").checked,
           } });
           document.getElementById("share-pass").value = "";
           await copy(share.url);

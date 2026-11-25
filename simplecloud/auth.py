@@ -109,6 +109,9 @@ def login():
     if current_user.is_authenticated:
         return redirect(url_for("files.files_page"))
     if request.method == "GET":
+        nxt = request.args.get("next", "")
+        if nxt.startswith("/") and not nxt.startswith("//") and "\\" not in nxt:  # same-site paths only
+            session["login_next"] = nxt
         return render_template("login.html", captcha_image=new_captcha())
 
     data = request.get_json(silent=True) or {}
@@ -183,7 +186,8 @@ def _complete_login(row, remember):
     db.commit()
     login_user(User(row), remember=remember)
     log_event("login_ok", user=row["username"])
-    target = url_for("auth.account_page") if row["must_change_password"] else url_for("files.files_page")
+    nxt = session.pop("login_next", None)
+    target = url_for("auth.account_page") if row["must_change_password"] else (nxt or url_for("files.files_page"))
     return jsonify(success=True, redirect_url=target)
 
 

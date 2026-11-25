@@ -107,3 +107,16 @@ def test_dismiss_finished_job(two_users, srv):
     job = wait(alice, alice.post("/api/fetch", json={"url": f"http://public.test:{port}/a.txt"}).json["jobs"][0]["id"])
     assert alice.delete(f"/api/fetch/{job['id']}").json["success"]
     assert alice.get("/api/fetch").json["jobs"] == []
+
+
+def test_admin_url_limit_and_exemption(two_users, app, srv):
+    alice, bob = two_users
+    conn = sqlite3.connect(app.config["DATABASE"])
+    conn.execute("INSERT INTO settings (key, value) VALUES ('fetch_limit_bytes', '1000')")
+    conn.execute("UPDATE users SET fetch_unlimited = 1 WHERE username = 'bob'")
+    conn.commit()
+    url = f"http://public.test:{srv.server_address[1]}/big"  # 5000 bytes
+    job = wait(alice, alice.post("/api/fetch", json={"url": url}).json["jobs"][0]["id"])
+    assert job["status"] == "failed" and "larger" in job["error"]
+    job = wait(bob, bob.post("/api/fetch", json={"url": url}).json["jobs"][0]["id"])
+    assert job["status"] == "done"

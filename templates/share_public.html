@@ -18,8 +18,20 @@
             {% if remaining is not none %} · {{ _("Downloads left: %(n)s", n=remaining) }}{% endif %}
             {% if share.expires_at %} · {{ _("Expires") }} <time id="share-expires"></time>{% endif %}
         </p>
-        {% if unlocked %}
-            <a class="btn btn-primary btn-block" href="{{ url_for('shares.public_download', token=share.token) }}">{{ icon("download") }}<span>{{ _("Download") }}</span></a>
+        {% if needs_login %}
+            <p class="alert" role="status">{{ _("Only signed-in users can download this file.") }}</p>
+            <a class="btn btn-primary btn-block" href="{{ url_for('auth.login', next=url_for('shares.public_page', token=share.token)) }}">{{ icon("lock") }}<span>{{ _("Sign in to download") }}</span></a>
+        {% elif unlocked %}
+            <div class="share-actions">
+                <a class="btn btn-primary btn-block" href="{{ url_for('shares.public_download', token=share.token) }}">{{ icon("download") }}<span>{{ _("Download") }}</span></a>
+                {% if kind %}
+                <button type="button" class="btn btn-block" id="share-view" aria-controls="share-viewer"
+                        data-src="{{ url_for('shares.public_view', token=share.token) }}" data-kind="{{ kind }}"
+                        data-name="{{ share.file_name }}">{{ icon("eye") }}<span>{{ _("View online") }}</span></button>
+                {% if remaining is not none %}<p class="hint">{{ _("Viewing online uses one download, like the download button.") }}</p>{% endif %}
+                {% endif %}
+            </div>
+            <div id="share-viewer" class="preview-body share-viewer" aria-live="polite" hidden></div>
         {% else %}
             <form id="unlock-form" class="form" data-token="{{ share.token }}" novalidate>
                 <div class="field">
