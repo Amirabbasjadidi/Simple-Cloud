@@ -105,9 +105,12 @@ def _send(row, inline):
         mime = "application/octet-stream"
     # download_name with non-ASCII characters is sent as RFC 5987 filename*=UTF-8''...
     resp = send_file(path, mimetype=mime, as_attachment=not kind, download_name=row["name"], conditional=True)
-    csp = "default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; frame-ancestors 'self'"
-    if kind != "pdf":  # Chrome's PDF viewer refuses to run in a sandboxed document
-        csp += "; sandbox"
+    if kind == "pdf":
+        # Chrome's PDF viewer is blocked ("This content is blocked") by sandbox or default-src/object-src 'none'.
+        csp = "frame-ancestors 'self'"
+    else:
+        csp = ("default-src 'none'; img-src 'self'; media-src 'self'; style-src 'unsafe-inline'; "
+               "frame-ancestors 'self'; sandbox")
     resp.headers["Content-Security-Policy"] = csp
     return resp
 

@@ -23,6 +23,7 @@ def test_preview_kinds(two_users, name, data, kind, ctype):
     assert r.headers["Content-Disposition"].startswith("inline")
     assert r.headers["X-Content-Type-Options"] == "nosniff"
     assert ("sandbox" in r.headers["Content-Security-Policy"]) == (kind != "pdf")
+    assert ("default-src" in r.headers["Content-Security-Policy"]) == (kind != "pdf")
 
 
 def test_no_preview_for_binary(two_users):

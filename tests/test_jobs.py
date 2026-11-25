@@ -68,7 +68,7 @@ def test_fetch_respects_quota(two_users, app, srv):
     port = srv.server_address[1]
     job = alice.post("/api/fetch", json={"url": f"http://public.test:{port}/a.txt"}).json["jobs"][0]
     job = wait(alice, job["id"])
-    assert job["status"] == "failed"
+    assert job["status"] == "failed" and "quota" in job["error"]
 
 
 def test_stale_jobs_marked_failed_and_temp_removed(app, two_users):

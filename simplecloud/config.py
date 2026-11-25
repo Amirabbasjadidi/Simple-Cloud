@@ -63,8 +63,8 @@ def load_config():
         # Background URL fetch jobs
         "FETCH_WORKERS": get_int("FETCH_WORKERS", 3),
         "FETCH_MAX_ACTIVE_JOBS": get_int("FETCH_MAX_ACTIVE_JOBS", 5),
-        # URL fetch limits
-        "FETCH_MAX_BYTES": get_int("FETCH_MAX_BYTES", 2 * 1024**3),
+        # URL fetch limits. FETCH_MAX_BYTES 0 = no extra cap (MAX_FILE_SIZE and the user's quota still apply).
+        "FETCH_MAX_BYTES": get_int("FETCH_MAX_BYTES", 0),
         "FETCH_CONNECT_TIMEOUT": float(get("FETCH_CONNECT_TIMEOUT", 10)),
         "FETCH_READ_TIMEOUT": float(get("FETCH_READ_TIMEOUT", 30)),
         "FETCH_TOTAL_TIMEOUT": float(get("FETCH_TOTAL_TIMEOUT", 3600)),

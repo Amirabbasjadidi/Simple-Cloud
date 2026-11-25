@@ -96,8 +96,9 @@ def _run(app, job_id):
             db.commit()
             limits = dict(cfg)
             left = quota.remaining(db, job["user_id"])
-            limits["FETCH_MAX_BYTES"] = min(x for x in (cfg["FETCH_MAX_BYTES"], cfg["MAX_FILE_SIZE"], left)
-                                            if x is not None)
+            cap = min(x for x in (cfg["FETCH_MAX_BYTES"], cfg["MAX_FILE_SIZE"]) if x)
+            quota_bound = left is not None and left < cap  # the user's free space is the tighter limit
+            limits["FETCH_MAX_BYTES"] = left if quota_bound else cap
             last = [0.0]
 
             def progress(done, total):
@@ -126,6 +127,8 @@ def _run(app, job_id):
                 log_event("fetch_cancelled", user=job["username"], url=job["url"])
                 return
             except (FetchError, quota.QuotaError) as e:
+                if quota_bound and "larger" in str(e):
+                    e = quota.QuotaError("Not enough storage space: this would exceed your quota.")
                 _finish(db, job_id, "failed", error=str(e))
                 log_event("fetch_failed", user=job["username"], url=job["url"], error=e)
                 return
