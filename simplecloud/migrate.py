@@ -8,7 +8,7 @@ import os
 import shutil
 import sqlite3
 
-from .db import LATEST_VERSION, V3_TABLES, V4_TABLES, connect, ensure_admin, schema_version, table_exists
+from .db import LATEST_VERSION, V3_TABLES, V4_TABLES, V5_STEPS, connect, ensure_admin, schema_version, table_exists
 from .storage import abs_path, guess_mime, new_stored_name
 
 
@@ -249,7 +249,21 @@ def migrate_v4(conn, cfg, dry_run, echo):
     echo("v4: added share download grants and backup runs")
 
 
-MIGRATIONS = {2: migrate_v2, 3: migrate_v3, 4: migrate_v4}
+def migrate_v5(conn, cfg, dry_run, echo):
+    if dry_run:
+        echo("v5 DB changes:")
+        echo("  - new table settings (admin settings such as the URL-download size limit)")
+        echo("  - users.fetch_unlimited, shares.login_required")
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    for stmt in V5_STEPS:
+        conn.execute(stmt)
+    conn.execute("PRAGMA user_version = 5")
+    conn.execute("COMMIT")
+    echo("v5: added admin settings, URL-download limit exemptions and sign-in-only share links")
+
+
+MIGRATIONS = {2: migrate_v2, 3: migrate_v3, 4: migrate_v4, 5: migrate_v5}
 
 
 def run(cfg, dry_run=False, echo=print, logger=None):

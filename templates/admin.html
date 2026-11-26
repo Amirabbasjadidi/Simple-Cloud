@@ -32,11 +32,30 @@
         <table class="table-cards">
             <thead>
             <tr><th scope="col">{{ _("User") }}</th><th scope="col">{{ _("Role") }}</th><th scope="col">{{ _("Status") }}</th>
-                <th scope="col">{{ _("Usage") }}</th><th scope="col">{{ _("Quota (MB)") }}</th><th scope="col"><span class="sr-only">{{ _("Actions") }}</span></th></tr>
+                <th scope="col">{{ _("Usage") }}</th><th scope="col">{{ _("Quota (MB)") }}</th>
+                <th scope="col">{{ _("URL download limit") }}</th><th scope="col"><span class="sr-only">{{ _("Actions") }}</span></th></tr>
             </thead>
-            <tbody id="users-body"><tr><td colspan="6" class="muted">{{ _("Loading…") }}</td></tr></tbody>
+            <tbody id="users-body"><tr><td colspan="7" class="muted">{{ _("Loading…") }}</td></tr></tbody>
         </table>
     </div>
+</section>
+
+<section class="card" aria-labelledby="fetch-limit-title">
+    <h2 id="fetch-limit-title">{{ _("Download from URL") }}</h2>
+    <form id="fetch-limit-form" class="form form-inline" novalidate>
+        <div class="field">
+            <label for="fetch-limit">{{ _("Size limit per download (MB)") }}</label>
+            <input id="fetch-limit" type="number" min="0" inputmode="numeric" placeholder="{{ _('No limit') }}"
+                   aria-describedby="fetch-limit-hint">
+        </div>
+        <div class="field">
+            <label for="fetch-timeout">{{ _("Time limit per download (minutes)") }}</label>
+            <input id="fetch-timeout" type="number" min="0" inputmode="numeric" placeholder="{{ _('No limit') }}"
+                   aria-describedby="fetch-limit-hint">
+        </div>
+        <div><button type="submit" class="btn btn-primary">{{ _("Save") }}</button></div>
+    </form>
+    <p id="fetch-limit-hint" class="hint">{{ _("Empty = no limit (for size, only each user's free space counts). Users ticked “No limit” in the list above are exempt from both limits.") }}</p>
 </section>
 
 <dialog id="delete-dialog" class="dialog dialog-wide" aria-labelledby="delete-title" aria-describedby="delete-summary"

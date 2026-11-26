@@ -12,7 +12,7 @@
       allUsers = users;
       tbody.replaceChildren(...users.map(row));
     } catch (e) {
-      tbody.replaceChildren(el("tr", {}, el("td", { colspan: 6, class: "error", text: e.message })));
+      tbody.replaceChildren(el("tr", {}, el("td", { colspan: 7, class: "error", text: e.message })));
     }
   }
 
@@ -37,6 +37,9 @@
       "aria-label": `${T("Quota (MB) for")} ${u.username}`, placeholder: "∞",
     });
     quota.addEventListener("change", () => patch(u, { quota_mb: quota.value || null }, T("Quota updated.")));
+    const unlimited = el("input", { type: "checkbox", checked: u.fetch_unlimited,
+      "aria-label": `${T("No URL download limit for")} ${u.username}` });
+    unlimited.addEventListener("change", () => patch(u, { fetch_unlimited: unlimited.checked }, T("URL download limit updated.")));
     const actions = el("div", { class: "row-actions" },
       el("button", { class: "btn btn-sm", type: "button", disabled: u.is_self,
         onclick: () => patch(u, { disabled: !u.disabled }, u.disabled ? T("User enabled.") : T("User disabled.")),
@@ -67,8 +70,33 @@
       el("td", { "data-label": T("Usage") }, el("span", { text: usage }),
         u.quota_bytes && u.used_bytes > u.quota_bytes ? el("span", { class: "badge badge-danger", text: T("Over quota") }) : null),
       el("td", { "data-label": T("Quota (MB)") }, quota),
+      el("td", { "data-label": T("URL download limit") },
+        el("label", { class: "check" }, unlimited, el("span", { text: T("No limit") }))),
       el("td", {}, actions));
   }
+
+  /* ---------- URL download size limit ---------- */
+  const limitForm = document.getElementById("fetch-limit-form");
+  const limitInput = document.getElementById("fetch-limit");
+  const timeoutInput = document.getElementById("fetch-timeout");
+  api("/api/admin/settings").then((s) => {
+    limitInput.value = s.fetch_limit_mb ?? "";
+    timeoutInput.value = s.fetch_timeout_minutes ?? "";
+  }).catch((e) => toast(e.message, "error"));
+  limitForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const btn = limitForm.querySelector("button");
+    btn.disabled = true;
+    try {
+      await api("/api/admin/settings", { method: "PATCH", json: {
+        fetch_limit_mb: limitInput.value || null, fetch_timeout_minutes: timeoutInput.value || null } });
+      toast(T("Settings saved."), "success");
+    } catch (err) {
+      toast(err.message, "error");
+    } finally {
+      btn.disabled = false;
+    }
+  });
 
   /* ---------- delete-user dialog ---------- */
   const NEW = "__new__";  // the "+ New user…" option

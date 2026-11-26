@@ -20,6 +20,8 @@
             <label for="share-max">{{ _("Download limit (optional)") }}</label>
             <input id="share-max" type="number" min="1" inputmode="numeric" placeholder="{{ _('Unlimited') }}">
         </div>
+        <label class="check"><input id="share-login" type="checkbox" aria-describedby="share-login-hint"> {{ _("Only signed-in users") }}</label>
+        <small id="share-login-hint" class="hint">{{ _("People without an account on this server cannot download it.") }}</small>
         <div class="dialog-actions">
             <button type="button" value="cancel" class="btn">{{ _("Close") }}</button>
             <button value="ok" class="btn btn-primary">{{ icon("link") }}<span>{{ _("Create link") }}</span></button>

@@ -1,16 +1,16 @@
-"""Share links: random token, optional expiry, optional password, optional download limit, revocable."""
+"""Share links: random token, optional expiry, password, download limit and sign-in requirement; revocable."""
 import hashlib
 import secrets
 import time
 
-from flask import Blueprint, current_app, jsonify, render_template, request, session, url_for
+from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import limiter
 from .db import get_db
 from .events import log_event
-from .files import ApiError, _owned_file_or_404, _send
+from .files import ApiError, _owned_file_or_404, _send, preview_kind
 
 bp = Blueprint("shares", __name__)
 
@@ -28,7 +28,7 @@ def share_json(r):
         "url": url_for("shares.public_page", token=r["token"], _external=True),
         "created_at": r["created_at"], "expires_at": r["expires_at"], "has_password": bool(r["password_hash"]),
         "max_downloads": r["max_downloads"], "download_count": r["download_count"],
-        "expired": _state(r) != "ok",
+        "login_required": bool(r["login_required"]), "expired": _state(r) != "ok",
     }
 
 
@@ -68,16 +68,18 @@ def create_share(file_id):
     hours = _positive_int(data.get("expires_hours"), "expiry", MAX_EXPIRY_HOURS)
     max_dl = _positive_int(data.get("max_downloads"), "download limit", 1_000_000)
     password = str(data.get("password") or "")
+    login_only = bool(data.get("login_required"))
     db = get_db()
     now = time.time()
     cur = db.execute(
-        "INSERT INTO shares (token, user_id, file_id, created_at, expires_at, password_hash, max_downloads) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO shares (token, user_id, file_id, created_at, expires_at, password_hash, max_downloads, "
+        "login_required) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         (secrets.token_urlsafe(24), current_user.id, file_id, now, now + hours * 3600 if hours else None,
-         generate_password_hash(password) if password else None, int(max_dl) if max_dl else None))
+         generate_password_hash(password) if password else None, int(max_dl) if max_dl else None,
+         int(login_only)))
     db.commit()
     log_event("share_create", user=current_user.username, file_id=file_id, share_id=cur.lastrowid,
-              expires_hours=hours, password=bool(password), max_downloads=max_dl)
+              expires_hours=hours, password=bool(password), max_downloads=max_dl, login_required=login_only)
     return jsonify(success=True, share=share_json(_shares(db, "s.id = ?", cur.lastrowid)[0]))
 
 
@@ -119,6 +121,10 @@ def _public_share(token):
 
 def _unlocked(row):
     return not row["password_hash"] or row["id"] in session.get("shares_unlocked", [])
+
+
+def _needs_login(row):
+    return row["login_required"] and not current_user.is_authenticated
 
 
 def _grant_cookie(row):
@@ -190,6 +196,7 @@ def public_page(token):
     if state != "ok":
         return _gone(state)
     return render_template("share_public.html", share=row, state=state, unlocked=_unlocked(row),
+                           needs_login=_needs_login(row), kind=preview_kind(row["mime_type"]),
                            remaining=None if row["max_downloads"] is None else row["max_downloads"] - row["download_count"])
 
 
@@ -199,6 +206,8 @@ def public_unlock(token):
     row, state = _public_share(token)
     if state != "ok":
         return jsonify(success=False, error="This link is invalid or has expired."), 404 if state == "missing" else 410
+    if _needs_login(row):
+        return jsonify(success=False, error="Please log in."), 401
     password = str((request.get_json(silent=True) or {}).get("password") or "")
     if row["password_hash"] and not check_password_hash(row["password_hash"], password):
         log_event("share_password_failed", share_id=row["id"])
@@ -209,9 +218,23 @@ def public_unlock(token):
 
 @bp.route("/s/<token>/download")  # GET and HEAD
 def public_download(token):
+    return _serve(token, inline=False)
+
+
+@bp.route("/s/<token>/view")  # GET and HEAD
+def public_view(token):
+    """Online viewing (audio, video, image, PDF, text) counts as a download exactly like the
+    download button: the first request uses one download and opens the grant; the player's range
+    requests and a later download from the same client ride on that grant."""
+    return _serve(token, inline=True)
+
+
+def _serve(token, inline):
     row, state = _public_share(token)
     if state in ("missing", "expired"):
         return _gone(state)
+    if _needs_login(row):
+        return redirect(url_for("auth.login", next=url_for("shares.public_page", token=token)))
     db = get_db()
     granted = _has_grant(db, row)
     if state == "exhausted" and not granted:
@@ -227,7 +250,7 @@ def public_download(token):
             return _gone("exhausted")
         if new_grant:
             log_event("share_download", share_id=row["id"], file_id=row["file_id"])
-    resp = _send(row, inline=False)
+    resp = _send(row, inline=inline)
     if new_grant:
         resp.set_cookie(_grant_cookie(row), new_grant, max_age=current_app.config["SHARE_GRANT_SECONDS"],
                         path=f"/s/{token}", httponly=True, samesite="Lax",

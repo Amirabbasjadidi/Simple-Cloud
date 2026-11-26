@@ -91,3 +91,17 @@ def test_admin_page_renders_and_nav_link(app):
     assert b"Users" in boss.get("/admin").data
     assert b'href="/admin"' in boss.get("/account").data
     assert b'href="/admin"' not in alice.get("/account").data
+
+
+def test_fetch_limit_setting_and_exemption(app):
+    boss, alice, users = setup(app)
+    assert boss.get("/api/admin/settings").json["fetch_limit_mb"] is None
+    assert boss.patch("/api/admin/settings", json={"fetch_limit_mb": 500}).json["success"]
+    assert boss.get("/api/admin/settings").json["fetch_limit_mb"] == 500
+    assert boss.patch("/api/admin/settings", json={"fetch_limit_mb": -1}).status_code == 400
+    assert boss.patch("/api/admin/settings", json={"fetch_limit_mb": None}).json["success"]
+    assert boss.get("/api/admin/settings").json["fetch_limit_mb"] is None
+    assert alice.patch("/api/admin/settings", json={"fetch_limit_mb": 1}).status_code == 403
+    assert boss.patch(f"/api/admin/users/{users['alice']['id']}", json={"fetch_unlimited": True}).json["success"]
+    users = {u["username"]: u for u in boss.get("/api/admin/users").json["users"]}
+    assert users["alice"]["fetch_unlimited"] is True
