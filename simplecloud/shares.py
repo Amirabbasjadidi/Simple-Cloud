@@ -145,7 +145,22 @@ def _has_grant(db, row):
     return "cookie" if hit["by_cookie"] else "ip"
 
 
-def _count_download(db, row):
+def _resume_segment():
+    """A Range request from a non-zero offset: what a download manager sends to continue a file."""
+    return bool(request.range and request.range.ranges and request.range.ranges[0][0] > 0)
+
+
+def _grant_for_request(db, row, inline):
+    """The grant this request may use. An IP-only grant (no cookie) covers only download resume
+    segments, so another device behind the same address (NAT, shared Wi-Fi) cannot open the page,
+    view online or download the whole file again."""
+    granted = _has_grant(db, row)
+    if granted == "ip" and (inline or not _resume_segment()):
+        return None
+    return granted
+
+
+def _count_download(db, row, inline):
     """Count one download and open a grant, atomically across workers.
 
     Returns (allowed, new_grant_token). A client that already holds a grant is never counted again;
@@ -155,7 +170,7 @@ def _count_download(db, row):
     now = time.time()
     db.execute("BEGIN IMMEDIATE")
     try:
-        if _has_grant(db, row):
+        if _grant_for_request(db, row, inline):
             db.execute("COMMIT")
             return True, None
         cur = db.execute("UPDATE shares SET download_count = download_count + 1 WHERE id = ? "
@@ -191,7 +206,7 @@ def _no_index(resp):
 @bp.route("/s/<token>", methods=["GET"])
 def public_page(token):
     row, state = _public_share(token)
-    if state == "exhausted" and _has_grant(get_db(), row):
+    if state == "exhausted" and _has_grant(get_db(), row) == "cookie":
         state = "ok"  # this client's download is still running / may resume
     if state != "ok":
         return _gone(state)
@@ -236,7 +251,7 @@ def _serve(token, inline):
     if _needs_login(row):
         return redirect(url_for("auth.login", next=url_for("shares.public_page", token=token)))
     db = get_db()
-    granted = _has_grant(db, row)
+    granted = _grant_for_request(db, row, inline)
     if state == "exhausted" and not granted:
         return _gone(state)
     # The grant cookie stands in for the password (it was issued after unlocking); a bare IP match
@@ -245,7 +260,7 @@ def _serve(token, inline):
         return render_template("share_public.html", share=row, state=state, unlocked=False, remaining=None), 403
     new_grant = None
     if not granted and request.method != "HEAD":  # a HEAD probe transfers nothing: never counted
-        allowed, new_grant = _count_download(db, row)
+        allowed, new_grant = _count_download(db, row, inline)
         if not allowed:
             return _gone("exhausted")
         if new_grant:

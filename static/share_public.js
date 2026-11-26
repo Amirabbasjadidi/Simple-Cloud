@@ -26,7 +26,7 @@
       case "image": box.replaceChildren(SC.el("img", { src, alt: name })); break;
       case "video": box.replaceChildren(SC.el("video", { src, controls: true, preload: "metadata" })); break;
       case "audio": box.replaceChildren(SC.el("audio", { src, controls: true, preload: "metadata" })); break;
-      case "pdf": box.replaceChildren(SC.el("iframe", { src, title: name })); break;
+      case "pdf": SC.pdfFrame(box, src, name); break;
       default: {
         box.replaceChildren(SC.el("p", { class: "muted", text: T("Loading…") }));
         try {

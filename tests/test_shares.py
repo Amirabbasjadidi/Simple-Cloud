@@ -185,8 +185,10 @@ def test_password_share_grant_cookie_vs_ip(two_users, app):
     fresh = _client(app, "10.9.9.9")
     fresh.set_cookie(cookie.key, cookie.value, path=f"/s/{t}")
     assert fresh.get(f"/s/{t}/download", headers={"Range": "bytes=2-"}).status_code == 206
-    # same IP without cookie or password: not counted again, but the password still applies
-    assert _client(app, "10.4.4.4").get(f"/s/{t}/download").status_code == 403
+    # same IP without cookie: a full download is not covered by the IP grant (limit used up)
+    assert _client(app, "10.4.4.4").get(f"/s/{t}/download").status_code == 410
+    # a resume segment is, but the password still applies
+    assert _client(app, "10.4.4.4").get(f"/s/{t}/download", headers={"Range": "bytes=2-"}).status_code == 403
 
 
 def test_login_required_share(two_users, app):
@@ -221,3 +223,18 @@ def test_view_online_counts_as_download(two_users, app):
     assert viewer.get(f"/s/{t}/download").status_code == 200  # same grant
     assert alice.get("/api/shares").json["shares"][0]["download_count"] == 1
     assert _client(app, "10.0.0.2").get(f"/s/{t}/view").status_code == 410  # no way around the limit
+
+
+def test_ip_grant_only_resumes_segments(two_users, app):
+    """Another device behind the same IP (NAT) gets nothing but download resume segments."""
+    alice, _ = two_users
+    _, share = make_share(alice, max_downloads=1)
+    t = token(share)
+    assert _client(app, "10.5.5.5").get(f"/s/{t}/view").status_code == 200  # uses the only download
+    phone = _client(app, "10.5.5.5")  # same address, no grant cookie
+    assert phone.get(f"/s/{t}").status_code == 410
+    assert phone.get(f"/s/{t}/download").status_code == 410
+    assert phone.get(f"/s/{t}/download", headers={"Range": "bytes=0-"}).status_code == 410
+    assert phone.get(f"/s/{t}/view", headers={"Range": "bytes=3-"}).status_code == 410
+    assert phone.get(f"/s/{t}/download", headers={"Range": "bytes=3-"}).status_code == 206
+    assert alice.get("/api/shares").json["shares"][0]["download_count"] == 1
