@@ -30,7 +30,7 @@
       case "image": body.replaceChildren(SC.el("img", { src, alt: f.name })); break;
       case "video": body.replaceChildren(SC.el("video", { src, controls: true, preload: "metadata" })); break;
       case "audio": body.replaceChildren(SC.el("audio", { src, controls: true, preload: "metadata" })); break;
-      case "pdf": body.replaceChildren(SC.el("iframe", { src, title: f.name })); break;
+      case "pdf": SC.pdfFrame(body, src, f.name); break;
       default: textPreview(f, body);
     }
     // Emptying the body stops media playback when the dialog closes.

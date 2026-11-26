@@ -226,5 +226,22 @@ const SC = (() => {
     });
   });
 
-  return { api, toast, confirm: confirmDialog, prompt: promptDialog, openDialog, formatBytes, formatDate, el, icon, t, num, lang, csrf, refreshUsage };
+  /* PDF preview from a blob: URL. Download managers (e.g. IDM's browser extension) grab a PDF
+     loaded straight into a frame and leave it blank; a fetch() into memory is left alone. */
+  let pdfUrl = null;
+  async function pdfFrame(box, src, title) {
+    box.replaceChildren(el("p", { class: "muted", text: t("Loading…") }));
+    try {
+      const r = await fetch(src);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const blob = new Blob([await r.blob()], { type: "application/pdf" });
+      if (pdfUrl) URL.revokeObjectURL(pdfUrl);  // one PDF preview open at a time
+      pdfUrl = URL.createObjectURL(blob);
+      box.replaceChildren(el("iframe", { src: pdfUrl, title }));
+    } catch (e) {
+      box.replaceChildren(el("p", { class: "error", role: "alert", text: `${t("Preview failed")}: ${e.message}` }));
+    }
+  }
+
+  return { api, toast, confirm: confirmDialog, prompt: promptDialog, openDialog, formatBytes, formatDate, el, icon, t, num, lang, csrf, refreshUsage, pdfFrame };
 })();

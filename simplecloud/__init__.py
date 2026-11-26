@@ -12,7 +12,8 @@ from .config import ROOT, load_config
 csrf = CSRFProtect()
 limiter = Limiter(key_func=get_remote_address)
 
-CSP = ("default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
+# frame-src blob:: PDF previews are fetched into memory and shown from a blob: URL.
+CSP = ("default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; "
        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
 
 
