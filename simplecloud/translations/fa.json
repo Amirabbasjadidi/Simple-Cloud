@@ -366,9 +366,11 @@
   "Size limit per download (MB)": "حداکثر حجم هر دانلود (مگابایت)",
   "No limit": "بدون محدودیت",
   "Save": "ذخیره",
-  "Empty = no limit: only each user's free space counts. Users ticked “No limit” in the list above are never limited.": "خالی = بدون محدودیت: فقط فضای خالی هر کاربر ملاک است. کاربرانی که در فهرست بالا «بدون محدودیت» برایشان تیک خورده، هیچ‌وقت محدود نمی‌شوند.",
   "URL download limit updated.": "محدودیت دانلود از لینک به‌روز شد.",
   "No URL download limit for": "بدون محدودیت دانلود از لینک برای",
   "Settings saved.": "تنظیمات ذخیره شد.",
-  "The limit must be a whole number of MB.": "محدودیت باید عددی صحیح بر حسب مگابایت باشد."
+  "The limit must be a whole number of MB.": "محدودیت باید عددی صحیح بر حسب مگابایت باشد.",
+  "Time limit per download (minutes)": "حداکثر زمان هر دانلود (دقیقه)",
+  "Empty = no limit (for size, only each user's free space counts). Users ticked “No limit” in the list above are exempt from both limits.": "خالی = بدون محدودیت (برای حجم، فقط فضای خالی هر کاربر ملاک است). کاربرانی که در فهرست بالا «بدون محدودیت» برایشان تیک خورده، از هر دو محدودیت معاف‌اند.",
+  "The time limit must be a whole number of minutes.": "محدودیت زمان باید عددی صحیح بر حسب دقیقه باشد."
 }

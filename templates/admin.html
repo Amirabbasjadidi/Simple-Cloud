@@ -48,9 +48,14 @@
             <input id="fetch-limit" type="number" min="0" inputmode="numeric" placeholder="{{ _('No limit') }}"
                    aria-describedby="fetch-limit-hint">
         </div>
+        <div class="field">
+            <label for="fetch-timeout">{{ _("Time limit per download (minutes)") }}</label>
+            <input id="fetch-timeout" type="number" min="0" inputmode="numeric" placeholder="{{ _('No limit') }}"
+                   aria-describedby="fetch-limit-hint">
+        </div>
         <div><button type="submit" class="btn btn-primary">{{ _("Save") }}</button></div>
     </form>
-    <p id="fetch-limit-hint" class="hint">{{ _("Empty = no limit: only each user's free space counts. Users ticked “No limit” in the list above are never limited.") }}</p>
+    <p id="fetch-limit-hint" class="hint">{{ _("Empty = no limit (for size, only each user's free space counts). Users ticked “No limit” in the list above are exempt from both limits.") }}</p>
 </section>
 
 <dialog id="delete-dialog" class="dialog dialog-wide" aria-labelledby="delete-title" aria-describedby="delete-summary"

@@ -78,13 +78,18 @@
   /* ---------- URL download size limit ---------- */
   const limitForm = document.getElementById("fetch-limit-form");
   const limitInput = document.getElementById("fetch-limit");
-  api("/api/admin/settings").then((s) => { limitInput.value = s.fetch_limit_mb ?? ""; }).catch((e) => toast(e.message, "error"));
+  const timeoutInput = document.getElementById("fetch-timeout");
+  api("/api/admin/settings").then((s) => {
+    limitInput.value = s.fetch_limit_mb ?? "";
+    timeoutInput.value = s.fetch_timeout_minutes ?? "";
+  }).catch((e) => toast(e.message, "error"));
   limitForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const btn = limitForm.querySelector("button");
     btn.disabled = true;
     try {
-      await api("/api/admin/settings", { method: "PATCH", json: { fetch_limit_mb: limitInput.value || null } });
+      await api("/api/admin/settings", { method: "PATCH", json: {
+        fetch_limit_mb: limitInput.value || null, fetch_timeout_minutes: timeoutInput.value || null } });
       toast(T("Settings saved."), "success");
     } catch (err) {
       toast(err.message, "error");

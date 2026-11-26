@@ -120,3 +120,26 @@ def test_admin_url_limit_and_exemption(two_users, app, srv):
     assert job["status"] == "failed" and "larger" in job["error"]
     job = wait(bob, bob.post("/api/fetch", json={"url": url}).json["jobs"][0]["id"])
     assert job["status"] == "done"
+
+
+def test_admin_time_limit_and_exemption(two_users, app, srv, monkeypatch):
+    alice, bob = two_users
+    boss = alice  # make alice admin to use the settings API
+    conn = sqlite3.connect(app.config["DATABASE"])
+    conn.execute("UPDATE users SET is_admin = 1 WHERE username = 'alice'")
+    conn.execute("UPDATE users SET fetch_unlimited = 1 WHERE username = 'bob'")
+    conn.commit()
+    assert boss.get("/api/admin/settings").json["fetch_timeout_minutes"] == 60  # FETCH_TOTAL_TIMEOUT default
+    assert boss.patch("/api/admin/settings", json={"fetch_timeout_minutes": 5}).json["success"]
+    assert boss.patch("/api/admin/settings", json={"fetch_timeout_minutes": "x"}).status_code == 400
+    seen = []
+    real = jobs.fetch_to_file
+    monkeypatch.setattr(jobs, "fetch_to_file", lambda url, path, cfg, progress=None:
+                        seen.append(cfg["FETCH_TOTAL_TIMEOUT"]) or real(url, path, cfg, progress))
+    url = f"http://public.test:{srv.server_address[1]}/a.txt"
+    for client in (alice, bob):
+        assert wait(client, client.post("/api/fetch", json={"url": url}).json["jobs"][0]["id"])["status"] == "done"
+    boss.patch("/api/admin/settings", json={"fetch_timeout_minutes": None})  # empty = no time limit
+    assert boss.get("/api/admin/settings").json["fetch_timeout_minutes"] is None
+    assert wait(alice, alice.post("/api/fetch", json={"url": url}).json["jobs"][0]["id"])["status"] == "done"
+    assert seen == [300, float("inf"), float("inf")]

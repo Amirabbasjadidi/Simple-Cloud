@@ -180,11 +180,23 @@ def delete_user(user_id):
 
 # ---------------------------------------------------------------- settings
 
+def _whole(value):
+    """Empty -> 0, a non-negative integer -> itself, anything else -> None."""
+    try:
+        n = int(value) if value not in (None, "") else 0
+    except (TypeError, ValueError):
+        return None
+    return n if n >= 0 else None
+
+
 @bp.route("/api/admin/settings")
 @admin_api
 def get_settings():
-    limit = int(get_setting(get_db(), "fetch_limit_bytes", 0))
-    return jsonify(fetch_limit_mb=limit // (1024 * 1024) or None)
+    db = get_db()
+    limit = int(get_setting(db, "fetch_limit_bytes", 0))
+    minutes = get_setting(db, "fetch_timeout_minutes")
+    minutes = int(minutes) if minutes else int(current_app.config["FETCH_TOTAL_TIMEOUT"] // 60)
+    return jsonify(fetch_limit_mb=limit // (1024 * 1024) or None, fetch_timeout_minutes=minutes or None)
 
 
 @bp.route("/api/admin/settings", methods=["PATCH"])
@@ -193,14 +205,15 @@ def update_settings():
     data = request.get_json(silent=True) or {}
     db = get_db()
     if "fetch_limit_mb" in data:
-        mb = data["fetch_limit_mb"]
-        try:
-            mb = int(mb) if mb not in (None, "") else 0
-        except (TypeError, ValueError):
-            mb = -1
-        if mb < 0:
+        mb = _whole(data["fetch_limit_mb"])
+        if mb is None:
             return jsonify(success=False, error="The limit must be a whole number of MB."), 400
         set_setting(db, "fetch_limit_bytes", mb * 1024 * 1024 or None)
+    if "fetch_timeout_minutes" in data:
+        minutes = _whole(data["fetch_timeout_minutes"])
+        if minutes is None:
+            return jsonify(success=False, error="The time limit must be a whole number of minutes."), 400
+        set_setting(db, "fetch_timeout_minutes", minutes)  # 0 = no time limit
     db.commit()
     log_event("admin_update_settings", admin=current_user.username, changes=",".join(sorted(data)))
     return jsonify(success=True)
