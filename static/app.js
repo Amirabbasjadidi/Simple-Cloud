@@ -247,7 +247,9 @@ const SC = (() => {
         cMapUrl: `${PDFJS}cmaps/`, cMapPacked: true, standardFontDataUrl: `${PDFJS}standard_fonts/`,
       }).promise;
       const doc = pdfDoc;
-      const pages = el("div", { class: "pdf-pages", role: "region", tabindex: "0", "aria-label": title });
+      // dir=ltr: canvas text inherits the page direction, and pdf.js places glyphs one by one
+      // assuming LTR. In our RTL page, text in embedded fonts (e.g. Chrome's Save as PDF) came out garbled.
+      const pages = el("div", { class: "pdf-pages", dir: "ltr", role: "region", tabindex: "0", "aria-label": title });
       box.replaceChildren(pages);
       const first = (await doc.getPage(1)).getViewport({ scale: 1 });
       const scale = Math.min(2, (pages.clientWidth - 24) / first.width);
