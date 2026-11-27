@@ -1,0 +1,32 @@
+<dialog id="upload-link-dialog" class="dialog" aria-labelledby="upload-link-title" aria-describedby="upload-link-intro">
+    <form method="dialog" novalidate>
+        <h2 id="upload-link-title" class="dialog-title">{{ _("Upload link") }}</h2>
+        <p class="muted share-file" id="upload-link-folder" dir="auto"></p>
+        <p class="hint" id="upload-link-intro">{{ _("People with this link can upload files into this folder. The files count toward your storage, and you see who uploaded each one when sign-in is required.") }}</p>
+        <div class="field">
+            <label for="link-expiry">{{ _("Link expires") }}</label>
+            <select id="link-expiry">
+                <option value="">{{ _("Never") }}</option>
+                <option value="1">{{ _("After 1 hour") }}</option>
+                <option value="24">{{ _("After 1 day") }}</option>
+                <option value="168" selected>{{ _("After 7 days") }}</option>
+                <option value="720">{{ _("After 30 days") }}</option>
+            </select>
+        </div>
+        <div class="field">
+            <label for="link-pass">{{ _("Password (optional)") }}</label>
+            <input id="link-pass" type="password" autocomplete="new-password" dir="ltr">
+        </div>
+        <div class="field">
+            <label for="link-max">{{ _("File limit (optional)") }}</label>
+            <input id="link-max" type="number" min="1" inputmode="numeric" placeholder="{{ _('Unlimited') }}">
+        </div>
+        <label class="check"><input id="link-login" type="checkbox" aria-describedby="link-login-hint"> {{ _("Only signed-in users") }}</label>
+        <small id="link-login-hint" class="hint">{{ _("Each uploaded file then shows the username of who uploaded it.") }}</small>
+        <div class="dialog-actions">
+            <button type="button" value="cancel" class="btn">{{ _("Close") }}</button>
+            <button value="ok" class="btn btn-primary">{{ icon("link") }}<span>{{ _("Create link") }}</span></button>
+        </div>
+        <div id="upload-link-existing" class="share-existing"></div>
+    </form>
+</dialog>

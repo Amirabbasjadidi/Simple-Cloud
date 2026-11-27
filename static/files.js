@@ -2,7 +2,7 @@
 
 (() => {
   const { api, toast, el, formatBytes, formatDate } = SC;
-  const T = (s) => (SC.t ? SC.t(s) : s);
+  const T = SC.t;
   const listing = document.getElementById("listing");
   const crumbs = document.getElementById("breadcrumbs");
   const search = document.getElementById("search");
@@ -15,6 +15,7 @@
     sort: localGet("sc.sort", "date:desc"),
     view: localGet("sc.view", "grid"),
     data: null,
+    selected: new Map(),  // "file:12" / "folder:3" -> item
   };
   search.value = state.q;
   sortSel.value = state.sort;
@@ -48,6 +49,7 @@
     else if (state.folder) qs.set("folder", state.folder);
     try {
       state.data = await api(`/api/files?${qs}`);
+      state.selected.clear();
       render();
     } catch (e) {
       if (e.status === 404 && state.folder) { navigate(null); return; }
@@ -103,7 +105,54 @@
     const list = el("ul", { class: "items", role: "list" },
       folders.map(folderItem), files.map(fileItem));
     listing.replaceChildren(list);
+    updateSelection();
+    if (SC.queueThumbs) SC.queueThumbs(list);
   }
+
+  /* ---------- selection ---------- */
+  const bar = document.getElementById("selection-bar");
+  function checkbox(type, item, li) {
+    const key = `${type}:${item.id}`;
+    const box = el("input", { type: "checkbox", class: "item-check", "aria-label": `${T("Select")} ${item.name}` });
+    box.checked = state.selected.has(key);
+    li.classList.toggle("is-selected", box.checked);
+    box.addEventListener("change", () => {
+      if (box.checked) state.selected.set(key, { type, item }); else state.selected.delete(key);
+      li.classList.toggle("is-selected", box.checked);
+      updateSelection();
+    });
+    return box;
+  }
+  function updateSelection() {
+    const n = state.selected.size;
+    bar.hidden = !n;
+    listing.classList.toggle("selecting", n > 0);
+    document.getElementById("selection-count").textContent = T("{n} selected", { n: SC.num(n) });
+  }
+  const picked = (type) => [...state.selected.values()].filter((s) => s.type === type).map((s) => s.item);
+  document.getElementById("sel-clear").addEventListener("click", () => { state.selected.clear(); render(); });
+  document.getElementById("sel-download").addEventListener("click", () => {
+    const files = picked("file");
+    const folders = picked("folder");
+    if (files.length === 1 && !folders.length) { location.href = files[0].download_url; return; }
+    const qs = new URLSearchParams();
+    if (files.length) qs.set("files", files.map((f) => f.id).join(","));
+    if (folders.length) qs.set("folders", folders.map((f) => f.id).join(","));
+    location.href = `/files/zip?${qs}`;
+  });
+  document.getElementById("sel-delete").addEventListener("click", async () => {
+    const files = picked("file");
+    const folders = picked("folder");
+    if (folders.length && !(await SC.confirm(T("The selected folders are removed. All files inside them go to the trash."),
+      { title: T("Delete selected items?"), confirmText: T("Delete"), danger: true }))) return;
+    try {
+      const r = await api("/api/items/delete", { method: "POST", json: { files: files.map((f) => f.id), folders: folders.map((f) => f.id) } });
+      toast(T("{n} files moved to the trash.", { n: SC.num(r.deleted_files) }), "success", 8000,
+        !folders.length ? { label: T("Undo"), onClick: () => restore(files) } : null);
+      await load();
+      SC.refreshUsage();
+    } catch (e) { toast(e.message, "error"); }
+  });
 
   /* Overflow menu (<details>) so every row keeps one compact "More" button on small screens. */
   function moreMenu(name, entries) {
@@ -120,16 +169,21 @@
   }
 
   function folderItem(f) {
-    return el("li", { class: "item item-folder" },
+    const li = el("li", { class: "item item-folder" });
+    li.append(checkbox("folder", f, li),
       el("button", { type: "button", class: "item-main", onclick: () => navigate(f.id), "aria-label": `${T("Open folder")} ${f.name}` },
         el("span", { class: "thumb" }, icon("folder", "icon-lg")),
         itemText(f.name, T("Folder"))),
       el("div", { class: "item-actions" },
         moreMenu(f.name, [
+          ["Download as ZIP", "archive", () => { location.href = `/files/zip?folders=${f.id}`; }],
+          SC.share ? ["Share", "link", () => SC.share(f, "folder")] : null,
+          SC.uploadLink ? ["Upload link", "upload", () => SC.uploadLink(f)] : null,
           ["Rename", "edit", () => renameFolder(f)],
           ["Move", "move", () => move("folder", f)],
           ["Delete", "trash", () => deleteFolder(f), true],
         ])));
+    return li;
   }
 
   function fileItem(f) {
@@ -137,12 +191,21 @@
     const thumb = el("span", { class: "thumb" });
     if (k === "image" && f.mime_type !== "image/svg+xml") {
       thumb.append(el("img", { src: f.preview_url, alt: "", loading: "lazy", decoding: "async" }));
+    } else if (f.thumb === "ready" || (f.thumb === "missing" && f.preview_kind === "audio")) {
+      // audio: the server reads the embedded cover on first request; no cover -> back to the icon
+      const img = el("img", { src: f.thumb_url, alt: "", loading: "lazy", decoding: "async",
+        class: f.preview_kind === "audio" ? "thumb-cover" : "" });
+      img.addEventListener("error", () => img.replaceWith(icon(k, "icon-lg")));
+      thumb.append(img);
     } else {
       thumb.append(icon(k, "icon-lg"));
+      if (f.thumb === "missing") thumb.dataset.makeThumb = JSON.stringify({ id: f.id, kind: f.preview_kind,
+        size: f.size, preview: f.preview_url, thumb: f.thumb_url });
     }
+    const by = f.uploaded_by ? ` · ${T("Uploaded by")} ${f.uploaded_by}` : (f.via_link ? ` · ${T("Via upload link")}` : "");
     const main = el("button", { type: "button", class: "item-main", "aria-label": `${T("Open")} ${f.name}`,
       onclick: () => (SC.preview ? SC.preview(f) : (location.href = f.download_url)) },
-      thumb, itemText(f.name, `${formatBytes(f.size)} · ${formatDate(f.created_at)}`));
+      thumb, itemText(f.name, `${formatBytes(f.size)} · ${formatDate(f.created_at)}${by}`));
     const actions = el("div", { class: "item-actions" },
       el("a", { class: "btn btn-sm btn-icon btn-ghost", href: f.download_url, download: "", title: T("Download"),
         "aria-label": `${T("Download")}: ${f.name}` }, icon("download")),
@@ -152,7 +215,9 @@
         ["Move", "move", () => move("file", f)],
         ["Delete", "trash", () => deleteFile(f), true],
       ]));
-    return el("li", { class: "item item-file" }, main, actions);
+    const li = el("li", { class: "item item-file" });
+    li.append(checkbox("file", f, li), main, actions);
+    return li;
   }
 
   /* ---------- actions ---------- */
@@ -201,16 +266,32 @@
     run(api(url, { method: "PATCH", json: type === "folder" ? { parent_id: value } : { folder_id: value } }), T("Moved."));
   }
 
+  /* A file goes to the trash: no confirmation, an Undo in the toast instead. */
   async function deleteFile(f) {
-    if (await SC.confirm(`${q(f.name)} ${T("will be deleted permanently.")}`, { title: T("Delete file?"), confirmText: T("Delete"), danger: true }))
-      run(api(`/api/files/${f.id}`, { method: "DELETE" }), T("File deleted."));
+    try {
+      await api(`/api/files/${f.id}`, { method: "DELETE" });
+      toast(`${q(f.name)} ${T("moved to the trash.")}`, "success", 8000, { label: T("Undo"), onClick: () => restore([f]) });
+      await load();
+    } catch (e) { toast(e.message, "error"); }
   }
 
-  async function deleteFolder(f) {
-    if (await SC.confirm(`${q(f.name)} ${T("and everything inside it will be deleted permanently.")}`,
-      { title: T("Delete folder?"), confirmText: T("Delete"), danger: true }))
-      run(api(`/api/folders/${f.id}`, { method: "DELETE" }), T("Folder deleted."));
+  async function restore(files) {
+    try {
+      for (const f of files) await api(`/api/trash/${f.id}/restore`, { method: "POST" });
+      toast(T("Restored."), "success");
+      await load();
+    } catch (e) { toast(e.message, "error"); }
   }
+
+  /* Folders are removed (their files go to the trash), so this one still asks. */
+  async function deleteFolder(f) {
+    if (await SC.confirm(`${q(f.name)} ${T("is removed. Its files go to the trash, where you can restore them.")}`,
+      { title: T("Delete folder?"), confirmText: T("Delete"), danger: true }))
+      run(api(`/api/folders/${f.id}`, { method: "DELETE" }), T("Folder deleted. Its files are in the trash."));
+  }
+
+  document.getElementById("folder-upload-link")?.addEventListener("click", () =>
+    SC.uploadLink(state.data?.folder || null));
 
   /* ---------- toolbar ---------- */
   let searchTimer;

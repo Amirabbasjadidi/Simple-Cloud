@@ -93,11 +93,15 @@ def delete_user(db, user, files_action=None, target=None, new_user=None):
             # Old top-level folders and files go under the new folder; deeper levels keep their parents.
             db.execute("UPDATE folders SET user_id = ?, parent_id = COALESCE(parent_id, ?) WHERE user_id = ?",
                        (receiver, root, user["id"]))
-            db.execute("UPDATE files SET user_id = ?, folder_id = COALESCE(folder_id, ?) WHERE user_id = ?",
-                       (receiver, root, user["id"]))
+            # Trashed files stay in the receiver's trash (folder_id NULL there).
+            db.execute("UPDATE files SET user_id = ?, folder_id = CASE WHEN deleted_at IS NULL "
+                       "THEN COALESCE(folder_id, ?) END WHERE user_id = ?", (receiver, root, user["id"]))
+            db.execute("UPDATE upload_links SET user_id = ? WHERE user_id = ?", (receiver, user["id"]))
         else:
             stored = [r[0] for r in db.execute("SELECT stored_name FROM files WHERE user_id = ?", (user["id"],))]
+            stored += [s + ".thumb" for s in stored]
             db.execute("DELETE FROM files WHERE user_id = ?", (user["id"],))
+            db.execute("DELETE FROM upload_links WHERE user_id = ?", (user["id"],))
         db.execute("DELETE FROM shares WHERE user_id = ?", (user["id"],))
         for table in ("uploads", "jobs"):  # partial uploads / fetch temp files
             stored += [r[0] for r in db.execute(f"SELECT stored_name FROM {table} WHERE user_id = ? "

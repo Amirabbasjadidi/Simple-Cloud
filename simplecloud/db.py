@@ -6,7 +6,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 
 # Bump together with a new step in migrate.MIGRATIONS. tests/test_migration.py checks that a
 # fresh database (SCHEMA below) and a migrated legacy database end up with the same tables.
-LATEST_VERSION = 5
+LATEST_VERSION = 6
 
 # Tables added in schema v3 (shared by the fresh schema and migrate_v3).
 V3_TABLES = [
@@ -87,6 +87,67 @@ V5_STEPS = [
     "ALTER TABLE shares ADD COLUMN login_required INTEGER NOT NULL DEFAULT 0",
 ]
 
+# Schema v6 steps (run by both the fresh schema and migrate_v6, with foreign keys off: the
+# shares table is rebuilt so a share can point to a file or a folder).
+V6_STEPS = [
+    # Trash: deleted files keep their row (and count toward the quota) until purged.
+    "ALTER TABLE files ADD COLUMN deleted_at REAL",
+    "ALTER TABLE files ADD COLUMN trash_folder_id INTEGER",  # where to restore to (no FK: may be gone)
+    "ALTER TABLE files ADD COLUMN trash_path TEXT",          # that folder's path, for display
+    # Files that arrived through an upload link: which link, and the signed-in uploader (if any).
+    "ALTER TABLE files ADD COLUMN upload_link_id INTEGER",
+    "ALTER TABLE files ADD COLUMN uploaded_by TEXT",
+    "CREATE INDEX idx_files_trash ON files(user_id, deleted_at)",
+    "ALTER TABLE uploads ADD COLUMN link_id INTEGER",
+    "ALTER TABLE uploads ADD COLUMN uploader TEXT",
+    """CREATE TABLE shares_v6 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL UNIQUE,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        file_id INTEGER REFERENCES files(id) ON DELETE CASCADE,
+        folder_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+        created_at REAL NOT NULL,
+        expires_at REAL,
+        password_hash TEXT,
+        max_downloads INTEGER,
+        download_count INTEGER NOT NULL DEFAULT 0,
+        login_required INTEGER NOT NULL DEFAULT 0,
+        CHECK ((file_id IS NULL) != (folder_id IS NULL))
+    )""",
+    "INSERT INTO shares_v6 (id, token, user_id, file_id, created_at, expires_at, password_hash, max_downloads, "
+    "download_count, login_required) SELECT id, token, user_id, file_id, created_at, expires_at, password_hash, "
+    "max_downloads, download_count, login_required FROM shares",
+    "DROP TABLE shares",
+    "ALTER TABLE shares_v6 RENAME TO shares",
+    "CREATE INDEX idx_shares_file ON shares(file_id)",
+    "CREATE INDEX idx_shares_folder ON shares(folder_id)",
+    # Upload links: others upload into one of the owner's folders (NULL = root).
+    """CREATE TABLE upload_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        token TEXT NOT NULL UNIQUE,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        folder_id INTEGER REFERENCES folders(id) ON DELETE CASCADE,
+        created_at REAL NOT NULL,
+        expires_at REAL,
+        password_hash TEXT,
+        login_required INTEGER NOT NULL DEFAULT 0,
+        max_files INTEGER,
+        file_count INTEGER NOT NULL DEFAULT 0
+    )""",
+    "CREATE INDEX idx_upload_links_user ON upload_links(user_id)",
+    # Activity log shown in the admin dashboard (also written to the service log).
+    """CREATE TABLE events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ts REAL NOT NULL,
+        event TEXT NOT NULL,
+        username TEXT,
+        ip TEXT,
+        details TEXT
+    )""",
+    "CREATE INDEX idx_events_ts ON events(ts)",
+    "CREATE INDEX idx_events_user ON events(username, ts)",
+]
+
 SCHEMA = [
     """CREATE TABLE users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -137,6 +198,7 @@ SCHEMA = [
     "CREATE INDEX idx_login_failures_ip ON login_failures(ip, ts)",
     "CREATE INDEX idx_login_failures_user ON login_failures(username, ts)",
     *V5_STEPS,
+    *V6_STEPS,
 ]
 
 

@@ -43,10 +43,10 @@ usage() { sed -n '2,23p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
 while [ $# -gt 0 ]; do
     case "$1" in
         --dir) INSTALL_DIR="$2"; shift 2 ;;
-        --data-dir) DATA_DIR="$2"; shift 2 ;;
+        --data-dir) DATA_DIR="$2"; DATA_DIR_GIVEN=1; shift 2 ;;
         --repo) REPO="$2"; shift 2 ;;
         --branch) BRANCH="$2"; shift 2 ;;
-        --domain) DOMAIN="$2"; shift 2 ;;
+        --domain) DOMAIN="$2"; DOMAIN_GIVEN=1; shift 2 ;;
         --pip-index) PIP_INDEX="$2"; shift 2 ;;
         --backup-timer) BACKUP_TIMER=1; shift ;;
         --backup-keep) BACKUP_KEEP="$2"; shift 2 ;;
@@ -61,6 +61,17 @@ done
 
 log() { printf '\n==> %s\n' "$*"; }
 die() { printf 'Error: %s\n' "$*" >&2; exit 1; }
+
+# Re-running without --data-dir/--domain keeps what the existing install uses, so an upgrade
+# never points the service at an empty data directory or changes the Nginx server name.
+if [ -z "${DATA_DIR_GIVEN:-}" ] && [ -f "$ENV_FILE" ] && grep -q '^DATABASE=' "$ENV_FILE"; then
+    DATA_DIR=$(dirname "$(grep '^DATABASE=' "$ENV_FILE" | tail -n1 | cut -d= -f2-)")
+    echo "Using the existing data directory $DATA_DIR (from $ENV_FILE)"
+fi
+if [ -z "${DOMAIN_GIVEN:-}" ] && [ -f "$NGINX_SITE" ]; then
+    OLD_NAME=$(sed -n 's/^[[:space:]]*server_name[[:space:]]\{1,\}\([^;]*\);.*/\1/p' "$NGINX_SITE" | head -n1)
+    if [ -n "$OLD_NAME" ] && [ "$OLD_NAME" != "_" ]; then DOMAIN="$OLD_NAME"; echo "Using the existing domain $DOMAIN"; fi
+fi
 
 [ "$(id -u)" -eq 0 ] || die "run as root: sudo $0 $*"
 [ -z "$BACKUP_KEEP" ] || [[ "$BACKUP_KEEP" =~ ^[1-9][0-9]*$ ]] || die "--backup-keep must be a positive number"

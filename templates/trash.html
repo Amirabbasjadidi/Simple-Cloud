@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}{{ _("Trash") }}{% endblock %}
+{% block content %}
+<div class="page-head trash-head">
+    <h1>{{ _("Trash") }}</h1>
+    <button type="button" class="btn btn-danger-ghost" id="empty-trash" hidden>{{ icon("trash") }}<span>{{ _("Empty trash") }}</span></button>
+</div>
+<p class="hint" id="trash-intro" data-days="{{ days }}">{{ _("Deleted files stay here for %(n)s days, then they are deleted for good. Until then they still count toward your storage.", n=days) }}</p>
+<p class="muted" id="trash-total" aria-live="polite"></p>
+<section class="card">
+    <ul id="trash-list" class="share-list" role="list" aria-live="polite"><li class="muted">{{ _("Loading…") }}</li></ul>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='trash.js') }}"></script>
+{% endblock %}

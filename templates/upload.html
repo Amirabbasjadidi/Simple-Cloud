@@ -4,7 +4,13 @@
 <div class="page-head">
     <h1>{{ _("Upload files") }}</h1>
 </div>
-<p class="muted" id="upload-target">{{ _("Uploading to") }} <a href="{{ url_for('files.files_page') }}" id="target-link" dir="auto">{{ _("My files") }}</a></p>
+<div class="field upload-target">
+    <label for="upload-folder">{{ _("Upload to folder") }}</label>
+    <select id="upload-folder" aria-describedby="upload-folder-hint">
+        <option value="">{{ _("My files") }}</option>
+    </select>
+    <small class="hint" id="upload-folder-hint">{{ _("Files you add go to this folder. Changing it affects files you add afterwards.") }}</small>
+</div>
 
 <div class="dropzone" id="dropzone">
     {{ icon("upload", "icon-xl") }}

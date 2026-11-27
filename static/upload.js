@@ -1,27 +1,41 @@
 "use strict";
 
-/* Multi-file, drag-and-drop, chunked + resumable upload with per-file progress. */
+/* Multi-file, drag-and-drop, chunked + resumable upload with per-file progress.
+   Used on the upload page (into a chosen folder) and on upload-link pages, where the dropzone's
+   data-api points at the link's endpoints and the link decides the folder. */
 (() => {
   const { api, toast, el, formatBytes } = SC;
   const T = (s) => (SC.t ? SC.t(s) : s);
   const PARALLEL = 2;
   const RETRIES = 5;
-  const folder = new URLSearchParams(location.search).get("folder");
   const queueEl = document.getElementById("queue");
   const dropzone = document.getElementById("dropzone");
   const input = document.getElementById("file-input");
+  const API = dropzone.dataset.api || "/api/uploads";
+  const folderSel = document.getElementById("upload-folder");
+  let folder = new URLSearchParams(location.search).get("folder") || "";
   const queue = [];
   let active = 0;
 
-  if (folder) {
-    api("/api/files?folder=" + encodeURIComponent(folder)).then((d) => {
-      const link = document.getElementById("target-link");
-      link.textContent = d.breadcrumbs.map((c) => c.name).join(" / ") || T("My files");
-      link.href = "/files?folder=" + encodeURIComponent(folder);
-    }).catch(() => {});
+  /* Folder picker: every folder by its full path; the choice is kept in the address (?folder=). */
+  if (folderSel) {
+    api("/api/folders").then(({ folders }) => {
+      const byId = new Map(folders.map((f) => [f.id, f]));
+      const path = (f) => { const p = []; for (let x = f; x; x = byId.get(x.parent_id)) p.unshift(x.name); return p.join(" / "); };
+      folderSel.append(...folders.map((f) => ({ value: String(f.id), label: path(f) }))
+        .sort((a, b) => a.label.localeCompare(b.label))
+        .map((o) => el("option", { value: o.value, dir: "auto", text: o.label })));
+      if (byId.has(Number(folder))) folderSel.value = folder; else folder = "";
+    }).catch((e) => toast(e.message, "error"));
+    folderSel.addEventListener("change", () => {
+      folder = folderSel.value;
+      const url = new URL(location.href);
+      if (folder) url.searchParams.set("folder", folder); else url.searchParams.delete("folder");
+      history.replaceState(null, "", url);
+    });
   }
 
-  const keyFor = (f) => `sc.upload:${folder || ""}:${f.name}:${f.size}:${f.lastModified}`;
+  const keyFor = (f, target) => `sc.upload:${API}:${target || ""}:${f.name}:${f.size}:${f.lastModified}`;
   const store = {
     get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
     set(k, v) { try { localStorage.setItem(k, v); } catch (_) { /* private mode */ } },
@@ -36,7 +50,8 @@
       const status = el("span", { class: "queue-status muted", text: T("Waiting…") });
       const cancelBtn = el("button", { type: "button", class: "btn btn-sm", text: T("Cancel"),
         "aria-label": `${T("Cancel")}: ${file.name}` });
-      const item = { file, bar, status, cancelBtn, cancelled: false, xhr: null, uploadId: null };
+      // The folder is fixed when the file is added: changing the picker later doesn't move it.
+      const item = { file, bar, status, cancelBtn, cancelled: false, xhr: null, uploadId: null, folder };
       cancelBtn.addEventListener("click", () => cancel(item));
       queueEl.append(el("li", { class: "queue-item" },
         el("div", { class: "queue-head" },
@@ -69,7 +84,7 @@
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       item.xhr = xhr;
-      xhr.open("PUT", `/api/uploads/${encodeURIComponent(item.uploadId)}?offset=${offset}`);
+      xhr.open("PUT", `${API}/${encodeURIComponent(item.uploadId)}?offset=${offset}`);
       xhr.setRequestHeader("X-CSRFToken", SC.csrf);
       xhr.setRequestHeader("Content-Type", "application/octet-stream");
       xhr.upload.onprogress = (e) => setProgress(item, offset + e.loaded);
@@ -92,19 +107,19 @@
 
   async function upload(item) {
     const { file } = item;
-    const key = keyFor(file);
+    const key = keyFor(file, item.folder);
     try {
       let received = 0;
       let chunkSize = 8 * 1024 * 1024;
       const saved = store.get(key);
       if (saved) {
         try {
-          const s = await api(`/api/uploads/${encodeURIComponent(saved)}`);
+          const s = await api(`${API}/${encodeURIComponent(saved)}`);
           if (s.size === file.size) { item.uploadId = saved; received = s.received; }
         } catch (_) { store.del(key); }
       }
       if (!item.uploadId) {
-        const r = await api("/api/uploads", { method: "POST", json: { name: file.name, size: file.size, folder_id: folder } });
+        const r = await api(API, { method: "POST", json: { name: file.name, size: file.size, folder_id: item.folder || null } });
         item.uploadId = r.upload_id;
         chunkSize = r.chunk_size;
         if (r.file) { done(item, key, r.file); return; }
@@ -158,9 +173,9 @@
     item.xhr?.abort();
     item.cancelBtn.hidden = true;
     item.status.textContent = T("Cancelled");
-    store.del(keyFor(item.file));
+    store.del(keyFor(item.file, item.folder));
     if (item.uploadId) {
-      try { await api(`/api/uploads/${encodeURIComponent(item.uploadId)}`, { method: "DELETE" }); } catch (_) { /* gone */ }
+      try { await api(`${API}/${encodeURIComponent(item.uploadId)}`, { method: "DELETE" }); } catch (_) { /* gone */ }
     }
   }
 

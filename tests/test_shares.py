@@ -81,9 +81,16 @@ def test_revoke_and_file_delete(two_users, app):
     anon = app.test_client()
     assert alice.delete(f"/api/shares/{share['id']}").json["success"]
     assert anon.get(f"/s/{token(share)}").status_code == 404
-    # deleting the file removes its links
+    # a file in the trash is not shared; restored, the link works again; deleted for good, it is gone
     fid2 = share2["file_id"]
     alice.delete(f"/api/files/{fid2}")
+    assert anon.get(f"/s/{token(share2)}").status_code == 404
+    assert anon.get(f"/s/{token(share2)}/download").status_code == 404
+    assert alice.get("/api/shares").json["shares"][0]["expired"] is True
+    assert alice.post(f"/api/trash/{fid2}/restore").json["success"]
+    assert anon.get(f"/s/{token(share2)}/download").status_code == 200
+    alice.delete(f"/api/files/{fid2}")
+    assert alice.delete(f"/api/trash/{fid2}").json["success"]
     assert anon.get(f"/s/{token(share2)}").status_code == 404
     assert alice.get("/api/shares").json["shares"] == []
 
@@ -238,3 +245,38 @@ def test_ip_grant_only_resumes_segments(two_users, app):
     assert phone.get(f"/s/{t}/view", headers={"Range": "bytes=3-"}).status_code == 410
     assert phone.get(f"/s/{t}/download", headers={"Range": "bytes=3-"}).status_code == 206
     assert alice.get("/api/shares").json["shares"][0]["download_count"] == 1
+
+
+def test_folder_share_listing_files_zip_and_limit(two_users, app):
+    import io
+    import zipfile
+    alice, bob = two_users
+    top = alice.post("/api/folders", json={"name": "Album"}).json["folder"]["id"]
+    sub = alice.post("/api/folders", json={"name": "CD2", "parent_id": top}).json["folder"]["id"]
+    put = lambda name, data, folder: alice.post("/upload", data={"file": (io.BytesIO(data), name), "folder_id": folder},
+                                                content_type="multipart/form-data").json["id"]
+    a = put("a.mp3", b"AAA", top)
+    b = put("b.txt", b"BBB", sub)
+    outside = upload(alice, "secret.txt", b"S").json["id"]
+    r = alice.post(f"/api/folders/{top}/shares", json={"max_downloads": 1})
+    share = r.json["share"]
+    assert share["kind"] == "folder" and share["file_name"] == "Album"
+    t = token(share)
+    visitor = _client(app, "10.7.7.7")
+    page = visitor.get(f"/s/{t}").get_data(as_text=True)
+    assert "a.mp3" in page and "b.txt" in page and "CD2" in page and "secret.txt" not in page
+    assert visitor.get(f"/s/{t}/f/{outside}/download").status_code == 404  # only files inside the folder
+    assert visitor.get(f"/s/{t}/f/{b}/download").data == b"BBB"  # counts this visitor once
+    assert visitor.get(f"/s/{t}/f/{a}/view").data == b"AAA"
+    z = zipfile.ZipFile(io.BytesIO(visitor.get(f"/s/{t}/download").data))
+    assert sorted(z.namelist()) == ["Album/CD2/b.txt", "Album/a.mp3"]
+    assert alice.get(f"/api/shares?folder_id={top}").json["shares"][0]["download_count"] == 1
+    assert _client(app, "10.7.7.8").get(f"/s/{t}/f/{a}/download").status_code == 410  # limit: 1 person
+    assert visitor.get(f"/s/{t}/view").status_code == 404  # a folder has no inline view
+    assert app.test_client().get(f"/s/{t}/f/{a}/download").status_code in (404, 410)
+    # file links never take /f/ URLs
+    _, fshare = make_share(alice)
+    assert visitor.get(f"/s/{token(fshare)}/f/{a}/download").status_code == 404
+    # deleting the folder removes its share
+    alice.delete(f"/api/folders/{top}")
+    assert visitor.get(f"/s/{t}").status_code == 404

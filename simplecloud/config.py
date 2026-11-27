@@ -78,6 +78,10 @@ def load_config():
         # After a share download is counted, that client may keep requesting the file (ranges,
         # parallel segments of download managers, retries) for this long without being counted again.
         "SHARE_GRANT_SECONDS": get_int("SHARE_GRANT_SECONDS", 12 * 3600),
+        # Deleted files stay in the trash (still counting toward the quota) for this many days.
+        "TRASH_DAYS": get_int("TRASH_DAYS", 30),
+        # Activity log rows (admin dashboard) older than this are removed.
+        "EVENTS_KEEP_DAYS": get_int("EVENTS_KEEP_DAYS", 180),
         # Flask-Limiter: coarse per-worker limits; memory:// is per process.
         "RATELIMIT_STORAGE_URI": get("RATELIMIT_STORAGE_URI", "memory://"),
         "RATELIMIT_ENABLED": get_bool("RATELIMIT_ENABLED", True),

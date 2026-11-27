@@ -4,8 +4,14 @@
 <div class="page-head">
     <h1>{{ _("Shared links") }}</h1>
 </div>
-<section class="card">
+<section class="card" aria-labelledby="shares-title">
+    <h2 id="shares-title">{{ _("Download links") }}</h2>
     <ul id="shares-list" class="share-list" role="list" aria-live="polite"><li class="muted">{{ _("Loading…") }}</li></ul>
+</section>
+<section class="card" aria-labelledby="upload-links-title">
+    <h2 id="upload-links-title">{{ _("Upload links") }}</h2>
+    <p class="hint">{{ _("People with one of these links can upload files into your folder. The files count toward your storage.") }}</p>
+    <ul id="upload-links-list" class="share-list" role="list" aria-live="polite"><li class="muted">{{ _("Loading…") }}</li></ul>
 </section>
 {% endblock %}
 {% block scripts %}

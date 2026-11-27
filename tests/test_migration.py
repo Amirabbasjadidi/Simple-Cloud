@@ -180,3 +180,26 @@ def test_app_refuses_requests_until_migrated(legacy, make_app):
     assert app.test_client().get("/login").status_code == 503
     migrate.run(app.config, echo=lambda *_: None)
     assert app.test_client().get("/login").status_code == 200
+
+
+def test_v6_keeps_share_links_and_grants(legacy, monkeypatch):
+    """The shares table is rebuilt in v6: links, counters and download grants must survive."""
+    monkeypatch.setattr(migrate, "LATEST_VERSION", 5)
+    migrate.run(legacy, echo=lambda *_: None)
+    conn = sqlite3.connect(legacy["DATABASE"])
+    fid = conn.execute("SELECT id FROM files LIMIT 1").fetchone()[0]
+    uid = conn.execute("SELECT user_id FROM files WHERE id = ?", (fid,)).fetchone()[0]
+    conn.execute("INSERT INTO shares (token, user_id, file_id, created_at, max_downloads, download_count, "
+                 "login_required) VALUES ('tok', ?, ?, 1, 3, 2, 1)", (uid, fid))
+    conn.execute("INSERT INTO share_grants (share_id, token_hash, ip, expires_at) VALUES (1, 'h', '1.2.3.4', 9e9)")
+    conn.commit()
+    conn.close()
+    monkeypatch.setattr(migrate, "LATEST_VERSION", LATEST_VERSION)
+    migrate.run(legacy, echo=lambda *_: None)
+    conn = sqlite3.connect(legacy["DATABASE"])
+    conn.row_factory = sqlite3.Row
+    s = conn.execute("SELECT * FROM shares WHERE token = 'tok'").fetchone()
+    assert (s["file_id"], s["folder_id"], s["max_downloads"], s["download_count"], s["login_required"]) == (fid, None, 3, 2, 1)
+    assert conn.execute("SELECT COUNT(*) FROM share_grants").fetchone()[0] == 1
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == LATEST_VERSION
+    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []

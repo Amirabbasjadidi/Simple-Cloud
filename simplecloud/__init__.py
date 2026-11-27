@@ -36,7 +36,7 @@ def create_app(overrides=None):
 
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-    from . import admin, auth, cli, db, files, i18n, jobs, shares, uploads
+    from . import admin, auth, cli, db, files, i18n, jobs, shares, thumbs, trash, upload_links, uploads, zips
     schema_ok = {"value": db.init_db(app)}
     if not schema_ok["value"]:
         app.logger.error("Database schema is out of date. Run `flask migrate --dry-run`, then `flask migrate`.")
@@ -49,6 +49,7 @@ def create_app(overrides=None):
             conn.close()
             if not schema_ok["value"]:
                 return "Database upgrade required: run `flask migrate` on the server.", 503
+        trash.maybe_housekeeping()
 
     app.teardown_appcontext(db.close_db)
     csrf.init_app(app)
@@ -60,6 +61,10 @@ def create_app(overrides=None):
     app.register_blueprint(uploads.bp)
     app.register_blueprint(jobs.bp)
     app.register_blueprint(shares.bp)
+    app.register_blueprint(trash.bp)
+    app.register_blueprint(zips.bp)
+    app.register_blueprint(thumbs.bp)
+    app.register_blueprint(upload_links.bp)
     i18n.init_app(app)
 
     from markupsafe import Markup, escape
@@ -73,6 +78,7 @@ def create_app(overrides=None):
         with app.app_context():
             uploads.cleanup_abandoned(db.get_db(), app.config)
             jobs.fail_stale(db.get_db(), app.config)
+            trash.housekeeping(db.get_db(), app.config)
     cli.register(app)
 
     @app.errorhandler(413)

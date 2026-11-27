@@ -100,6 +100,10 @@ def test_delete_folder_recursive(two_users, app):
     r = alice.delete(f"/api/folders/{a}").json
     assert r["deleted_files"] == 2 and r["deleted_folders"] == 2
     assert [f["id"] for f in listing(alice)["files"]] == [keep]
+    # the folder's files wait in the trash; emptying it removes them from disk
+    assert {f["name"] for f in alice.get("/api/trash").json["files"]} == {"1.txt", "2.txt"}
+    assert len(os.listdir(os.path.join(app.config["UPLOAD_FOLDER"], "2"))) == 3
+    assert alice.delete("/api/trash").json["deleted"] == 2
     assert len(os.listdir(os.path.join(app.config["UPLOAD_FOLDER"], "2"))) == 1
 
 

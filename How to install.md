@@ -262,7 +262,9 @@ sudo ./install.sh --domain cloud.local --backup-timer
 ```
 
 The installer pulls the newest `main` into `/opt/simplecloud`, updates the Python packages,
-upgrades the database and restarts the service. Before changing the database schema it writes a
+upgrades the database and restarts the service. Without `--data-dir` or `--domain` it keeps the data
+directory (from `DATABASE=` in `/etc/simplecloud.env`) and the domain (from the Nginx site) that the
+install already uses, so `sudo ./install.sh` alone is enough for an upgrade. Before changing the database schema it writes a
 backup to `/var/lib/simplecloud/backups/<timestamp>/` automatically, and the migration can be
 resumed if it is interrupted. To see what an upgrade would change without changing anything:
 
