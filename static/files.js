@@ -114,6 +114,7 @@
   function checkbox(type, item, li) {
     const key = `${type}:${item.id}`;
     const box = el("input", { type: "checkbox", class: "item-check", "aria-label": `${T("Select")} ${item.name}` });
+    const label = el("label", { class: "item-select" }, box);  // 44px touch target around the small box
     box.checked = state.selected.has(key);
     li.classList.toggle("is-selected", box.checked);
     box.addEventListener("change", () => {
@@ -121,7 +122,7 @@
       li.classList.toggle("is-selected", box.checked);
       updateSelection();
     });
-    return box;
+    return label;
   }
   function updateSelection() {
     const n = state.selected.size;
