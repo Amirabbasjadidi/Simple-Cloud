@@ -25,7 +25,8 @@
     viewBtn.setAttribute("aria-expanded", "true");
     box.hidden = false;
     viewBtn.closest(".auth-card").classList.add("is-viewing");
-    (title || box).scrollIntoView({ behavior: "smooth", block: "start" });
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    (title || box).scrollIntoView({ behavior: still ? "auto" : "smooth", block: "start" });
     switch (kind) {
       case "image": box.replaceChildren(SC.el("img", { src, alt: name })); break;
       case "video": box.replaceChildren(SC.el("video", { src, controls: true, preload: "metadata" })); break;
