@@ -97,7 +97,10 @@ def _send(row, inline):
     if not os.path.isfile(path):
         abort(404)
     kind = preview_kind(row["mime_type"]) if inline else None
-    if kind == "text":
+    raw = kind == "pdf" and request.args.get("raw") == "1"
+    if kind == "text" or raw:
+        # raw: the bytes for the in-page PDF viewer (pdf.js). As text/plain with no filename,
+        # download managers such as IDM let the request through instead of taking it over.
         mime = "text/plain"  # HTML/SVG/JS source shown as text, never executed (Werkzeug adds charset)
     elif kind:
         mime = row["mime_type"]
@@ -105,6 +108,8 @@ def _send(row, inline):
         mime = "application/octet-stream"
     # download_name with non-ASCII characters is sent as RFC 5987 filename*=UTF-8''...
     resp = send_file(path, mimetype=mime, as_attachment=not kind, download_name=row["name"], conditional=True)
+    if raw:
+        del resp.headers["Content-Disposition"]
     if kind == "pdf":
         # Chrome's PDF viewer is blocked ("This content is blocked") by sandbox or default-src/object-src 'none'.
         csp = "frame-ancestors 'self'"
