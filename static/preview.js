@@ -12,8 +12,9 @@
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const text = await r.text();
       const total = Number((r.headers.get("Content-Range") || "").split("/")[1]) || f.size;
+      // replaceChildren() would print a null argument as the text "null".
       body.replaceChildren(SC.el("pre", { class: "preview-text", dir: "auto", tabindex: "0", text }),
-        total > TEXT_LIMIT ? SC.el("p", { class: "muted", text: T("Showing the first 256 KB. Download the file to see all of it.") }) : null);
+        ...(total > TEXT_LIMIT ? [SC.el("p", { class: "muted", text: T("Showing the first 256 KB. Download the file to see all of it.") })] : []));
     } catch (e) {
       body.replaceChildren(SC.el("p", { class: "error", role: "alert", text: `${T("Preview failed")}: ${e.message}` }));
     }
