@@ -59,7 +59,9 @@ def test_delete_removes_file_from_disk(two_users, app):
     alice, _ = two_users
     upload(alice, "a.txt")
     f = alice.get("/api/files").json["files"][0]
-    assert alice.delete(f"/api/files/{f['id']}").json["success"]
+    assert alice.delete(f"/api/files/{f['id']}").json["success"]  # to the trash: still on disk
+    assert len(os.listdir(os.path.join(app.config["UPLOAD_FOLDER"], "2"))) == 1
+    assert alice.delete(f"/api/trash/{f['id']}").json["success"]
     assert os.listdir(os.path.join(app.config["UPLOAD_FOLDER"], "2")) == []
 
 

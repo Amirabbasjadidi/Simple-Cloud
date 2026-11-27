@@ -8,7 +8,7 @@ import os
 import shutil
 import sqlite3
 
-from .db import LATEST_VERSION, V3_TABLES, V4_TABLES, V5_STEPS, connect, ensure_admin, schema_version, table_exists
+from .db import LATEST_VERSION, V3_TABLES, V4_TABLES, V5_STEPS, V6_STEPS, connect, ensure_admin, schema_version, table_exists
 from .storage import abs_path, guess_mime, new_stored_name
 
 
@@ -263,7 +263,35 @@ def migrate_v5(conn, cfg, dry_run, echo):
     echo("v5: added admin settings, URL-download limit exemptions and sign-in-only share links")
 
 
-MIGRATIONS = {2: migrate_v2, 3: migrate_v3, 4: migrate_v4, 5: migrate_v5}
+def migrate_v6(conn, cfg, dry_run, echo):
+    if dry_run:
+        echo("v6 DB changes:")
+        echo("  - files: trash columns (deleted_at, trash_folder_id, trash_path), upload-link columns")
+        echo("  - shares rebuilt so a share can point to a file or a folder (existing links keep working)")
+        echo("  - new tables upload_links and events (activity log)")
+        return
+    # Rebuilding shares drops the old table: with foreign keys on, that would delete every
+    # download grant. PRAGMA foreign_keys only changes outside a transaction.
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute("BEGIN IMMEDIATE")
+        for stmt in V6_STEPS:
+            conn.execute(stmt)
+        bad = conn.execute("PRAGMA foreign_key_check").fetchall()
+        if bad:
+            raise MigrationError(f"Foreign key check failed after the v6 changes: {bad[:5]}")
+        conn.execute("PRAGMA user_version = 6")
+        conn.execute("COMMIT")
+    except BaseException:
+        if conn.in_transaction:
+            conn.execute("ROLLBACK")
+        raise
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+    echo("v6: added trash, folder sharing, upload links and the activity log")
+
+
+MIGRATIONS = {2: migrate_v2, 3: migrate_v3, 4: migrate_v4, 5: migrate_v5, 6: migrate_v6}
 
 
 def run(cfg, dry_run=False, echo=print, logger=None):

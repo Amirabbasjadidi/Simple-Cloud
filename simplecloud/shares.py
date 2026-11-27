@@ -1,16 +1,24 @@
-"""Share links: random token, optional expiry, password, download limit and sign-in requirement; revocable."""
+"""Share links for a file or a folder: random token, optional expiry, password, download limit and
+sign-in requirement; revocable.
+
+A folder share lists the folder's files (with subfolders) for download or online viewing, plus the
+whole folder as a ZIP. Its download limit counts people, like a file share: a client's first
+download opens a grant that covers its other downloads from that share for SHARE_GRANT_SECONDS.
+A file in the trash is not shared while it is there.
+"""
 import hashlib
 import secrets
 import time
 
-from flask import Blueprint, current_app, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, current_app, jsonify, redirect, render_template, request, session, url_for
 from flask_login import current_user, login_required
 from werkzeug.security import check_password_hash, generate_password_hash
 
 from . import limiter
 from .db import get_db
 from .events import log_event
-from .files import ApiError, _owned_file_or_404, _send, preview_kind
+from .files import ApiError, _owned_file_or_404, _send, owned_folder, preview_kind, subfolder_ids
+from .zips import folder_entries, folder_files, zip_response
 
 bp = Blueprint("shares", __name__)
 
@@ -24,7 +32,8 @@ def _api_error(e):
 
 def share_json(r):
     return {
-        "id": r["id"], "file_id": r["file_id"], "file_name": r["file_name"],
+        "id": r["id"], "file_id": r["file_id"], "folder_id": r["folder_id"], "file_name": r["file_name"],
+        "kind": "folder" if r["folder_id"] else "file",
         "url": url_for("shares.public_page", token=r["token"], _external=True),
         "created_at": r["created_at"], "expires_at": r["expires_at"], "has_password": bool(r["password_hash"]),
         "max_downloads": r["max_downloads"], "download_count": r["download_count"],
@@ -33,6 +42,8 @@ def share_json(r):
 
 
 def _state(r):
+    if r["file_id"] and r["deleted_at"] is not None:
+        return "missing"  # in the trash: not shared until restored
     if r["expires_at"] is not None and r["expires_at"] <= time.time():
         return "expired"
     if r["max_downloads"] is not None and r["download_count"] >= r["max_downloads"]:
@@ -64,6 +75,17 @@ def shares_page():
 @login_required
 def create_share(file_id):
     _owned_file_or_404(file_id)
+    return _create(file_id=file_id)
+
+
+@bp.route("/api/folders/<int:folder_id>/shares", methods=["POST"])
+@login_required
+def create_folder_share(folder_id):
+    owned_folder(get_db(), current_user.id, folder_id)
+    return _create(folder_id=folder_id)
+
+
+def _create(file_id=None, folder_id=None):
     data = request.get_json(silent=True) or {}
     hours = _positive_int(data.get("expires_hours"), "expiry", MAX_EXPIRY_HOURS)
     max_dl = _positive_int(data.get("max_downloads"), "download limit", 1_000_000)
@@ -72,19 +94,20 @@ def create_share(file_id):
     db = get_db()
     now = time.time()
     cur = db.execute(
-        "INSERT INTO shares (token, user_id, file_id, created_at, expires_at, password_hash, max_downloads, "
-        "login_required) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-        (secrets.token_urlsafe(24), current_user.id, file_id, now, now + hours * 3600 if hours else None,
+        "INSERT INTO shares (token, user_id, file_id, folder_id, created_at, expires_at, password_hash, "
+        "max_downloads, login_required) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (secrets.token_urlsafe(24), current_user.id, file_id, folder_id, now, now + hours * 3600 if hours else None,
          generate_password_hash(password) if password else None, int(max_dl) if max_dl else None,
          int(login_only)))
     db.commit()
-    log_event("share_create", user=current_user.username, file_id=file_id, share_id=cur.lastrowid,
+    log_event("share_create", user=current_user.username, file_id=file_id, folder_id=folder_id, share_id=cur.lastrowid,
               expires_hours=hours, password=bool(password), max_downloads=max_dl, login_required=login_only)
     return jsonify(success=True, share=share_json(_shares(db, "s.id = ?", cur.lastrowid)[0]))
 
 
 def _shares(db, where, *params):
-    return db.execute("SELECT s.*, f.name AS file_name FROM shares s JOIN files f ON f.id = s.file_id "
+    return db.execute("SELECT s.*, COALESCE(f.name, d.name) AS file_name, f.deleted_at FROM shares s "
+                      "LEFT JOIN files f ON f.id = s.file_id LEFT JOIN folders d ON d.id = s.folder_id "
                       f"WHERE s.user_id = ? AND {where} ORDER BY s.created_at DESC",
                       (current_user.id, *params)).fetchall()
 
@@ -93,7 +116,13 @@ def _shares(db, where, *params):
 @login_required
 def list_shares():
     file_id = request.args.get("file_id", type=int)
-    rows = _shares(get_db(), "s.file_id = ?", file_id) if file_id else _shares(get_db(), "1")
+    folder_id = request.args.get("folder_id", type=int)
+    if file_id:
+        rows = _shares(get_db(), "s.file_id = ?", file_id)
+    elif folder_id:
+        rows = _shares(get_db(), "s.folder_id = ?", folder_id)
+    else:
+        rows = _shares(get_db(), "1")
     return jsonify(shares=[share_json(r) for r in rows])
 
 
@@ -113,8 +142,9 @@ def revoke_share(share_id):
 
 def _public_share(token):
     """(row, state) where state is ok | expired | exhausted | missing."""
-    row = get_db().execute("SELECT s.*, f.name, f.name AS file_name, f.size, f.mime_type, f.stored_name "
-                           "FROM shares s JOIN files f ON f.id = s.file_id JOIN users u ON u.id = s.user_id "
+    row = get_db().execute("SELECT s.*, f.name, COALESCE(f.name, d.name) AS file_name, f.size, f.mime_type, "
+                           "f.stored_name, f.deleted_at FROM shares s LEFT JOIN files f ON f.id = s.file_id "
+                           "LEFT JOIN folders d ON d.id = s.folder_id JOIN users u ON u.id = s.user_id "
                            "WHERE s.token = ? AND u.disabled = 0", (token,)).fetchone()
     return (row, _state(row)) if row else (None, "missing")
 
@@ -210,8 +240,15 @@ def public_page(token):
         state = "ok"  # this client's download is still running / may resume
     if state != "ok":
         return _gone(state)
+    items = None
+    if row["folder_id"] and _unlocked(row) and not _needs_login(row):
+        items = [{"path": rel, "name": f["name"], "size": f["size"], "kind": preview_kind(f["mime_type"]),
+                  "download": url_for("shares.public_file", token=token, file_id=f["id"]),
+                  "view": url_for("shares.public_file_view", token=token, file_id=f["id"])}
+                 for rel, f in folder_files(get_db(), row["folder_id"])]
     return render_template("share_public.html", share=row, state=state, unlocked=_unlocked(row),
-                           needs_login=_needs_login(row), kind=preview_kind(row["mime_type"]),
+                           needs_login=_needs_login(row), items=items,
+                           kind=None if row["folder_id"] else preview_kind(row["mime_type"]),
                            remaining=None if row["max_downloads"] is None else row["max_downloads"] - row["download_count"])
 
 
@@ -231,9 +268,19 @@ def public_unlock(token):
     return jsonify(success=True)
 
 
-@bp.route("/s/<token>/download")  # GET and HEAD
+@bp.route("/s/<token>/download")  # GET and HEAD; a folder share: the whole folder as a ZIP
 def public_download(token):
     return _serve(token, inline=False)
+
+
+@bp.route("/s/<token>/f/<int:file_id>/download")  # one file of a folder share
+def public_file(token, file_id):
+    return _serve(token, inline=False, file_id=file_id)
+
+
+@bp.route("/s/<token>/f/<int:file_id>/view")
+def public_file_view(token, file_id):
+    return _serve(token, inline=True, file_id=file_id)
 
 
 @bp.route("/s/<token>/view")  # GET and HEAD
@@ -244,10 +291,26 @@ def public_view(token):
     return _serve(token, inline=True)
 
 
-def _serve(token, inline):
+def _folder_file(row, file_id):
+    """A live file inside the shared folder (any depth), or 404."""
+    db = get_db()
+    ids = subfolder_ids(db, row["folder_id"])
+    f = db.execute(f"SELECT * FROM files WHERE id = ? AND user_id = ? AND deleted_at IS NULL "
+                   f"AND folder_id IN ({','.join('?' * len(ids))})", (file_id, row["user_id"], *ids)).fetchone()
+    if f is None:
+        abort(404)
+    return f
+
+
+def _serve(token, inline, file_id=None):
     row, state = _public_share(token)
     if state in ("missing", "expired"):
         return _gone(state)
+    if file_id is not None and not row["folder_id"]:
+        abort(404)  # /f/<id>/ URLs exist only for folder shares
+    if row["folder_id"] and file_id is None and inline:
+        abort(404)  # a folder has no online view of its own (its files do)
+    target = _folder_file(row, file_id) if file_id is not None else row
     if _needs_login(row):
         return redirect(url_for("auth.login", next=url_for("shares.public_page", token=token)))
     db = get_db()
@@ -264,8 +327,13 @@ def _serve(token, inline):
         if not allowed:
             return _gone("exhausted")
         if new_grant:
-            log_event("share_download", share_id=row["id"], file_id=row["file_id"])
-    resp = _send(row, inline=inline)
+            log_event("share_download", user=current_user.username if current_user.is_authenticated else None,
+                      share_id=row["id"], file_id=target["id"] if file_id else row["file_id"],
+                      folder_id=row["folder_id"], name=target["name"] if file_id else row["file_name"])
+    if row["folder_id"] and file_id is None:
+        resp = zip_response(folder_entries(get_db(), row["folder_id"], row["file_name"]), row["file_name"] + ".zip")
+    else:
+        resp = _send(target, inline=inline)
     if new_grant:
         resp.set_cookie(_grant_cookie(row), new_grant, max_age=current_app.config["SHARE_GRANT_SECONDS"],
                         path=f"/s/{token}", httponly=True, samesite="Lax",

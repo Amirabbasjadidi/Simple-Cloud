@@ -41,7 +41,7 @@
             <nav class="main-nav" aria-label="{{ _('Main') }}">
                 {% set nav = [('files.files_page', 'Files', 'folder'), ('files.upload_page', 'Upload', 'upload'),
                               ('files.download_page', 'Fetch URL', 'globe-down'), ('shares.shares_page', 'Shares', 'link'),
-                              ('auth.account_page', 'Settings', 'settings')] %}
+                              ('trash.trash_page', 'Trash', 'trash'), ('auth.account_page', 'Settings', 'settings')] %}
                 {% if current_user.is_admin %}{% set nav = nav + [('admin.admin_page', 'Admin', 'users')] %}{% endif %}
                 <ul>
                 {% for endpoint, label, ic in nav %}

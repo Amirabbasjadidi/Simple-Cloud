@@ -4,6 +4,7 @@
   const meta = document.getElementById("share-meta");
   if (meta) {
     document.getElementById("share-size").textContent = SC.formatBytes(Number(meta.dataset.size));
+    document.querySelectorAll("[data-bytes]").forEach((s) => { s.textContent = SC.formatBytes(Number(s.dataset.bytes)); });
     const exp = document.getElementById("share-expires");
     if (exp && meta.dataset.expires) {
       const d = new Date(Number(meta.dataset.expires) * 1000);
@@ -11,17 +12,20 @@
       exp.textContent = d.toLocaleString(document.documentElement.lang || undefined);
     }
   }
-  /* Online viewing: the first request to /view uses one download (same as the download button),
-     so the player only loads after an explicit click. */
-  const viewBtn = document.getElementById("share-view");
-  viewBtn?.addEventListener("click", async () => {
+  /* Online viewing: the first request to a /view URL uses one download (same as the download
+     button), so the player only loads after an explicit click. A folder share has one button per
+     file, all showing in the same viewer. */
+  document.querySelectorAll(".share-view-btn").forEach((viewBtn) => viewBtn.addEventListener("click", async () => {
     const T = (s) => (SC.t ? SC.t(s) : s);
     const box = document.getElementById("share-viewer");
     const { src, kind, name } = viewBtn.dataset;
-    viewBtn.disabled = true;
+    const title = document.getElementById("share-viewer-title");
+    if (title) { title.hidden = false; title.textContent = name; }
+    if (viewBtn.id === "share-view") viewBtn.disabled = true;
     viewBtn.setAttribute("aria-expanded", "true");
     box.hidden = false;
     viewBtn.closest(".auth-card").classList.add("is-viewing");
+    (title || box).scrollIntoView({ behavior: "smooth", block: "start" });
     switch (kind) {
       case "image": box.replaceChildren(SC.el("img", { src, alt: name })); break;
       case "video": box.replaceChildren(SC.el("video", { src, controls: true, preload: "metadata" })); break;
@@ -38,13 +42,13 @@
         }
       }
     }
-  });
+  }));
 
   const form = document.getElementById("unlock-form");
   form?.addEventListener("submit", async (e) => {
     e.preventDefault();
     try {
-      await SC.api(`/s/${encodeURIComponent(form.dataset.token)}`, {
+      await SC.api(form.dataset.endpoint || `/s/${encodeURIComponent(form.dataset.token)}`, {
         method: "POST", json: { password: document.getElementById("share-password").value },
       });
       location.reload();

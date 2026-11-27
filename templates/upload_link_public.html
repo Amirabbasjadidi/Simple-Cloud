@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% set bare = true %}
+{% block title %}{{ _("Upload files") }}{% endblock %}
+{% block content %}
+<section class="card auth-card upload-link-card" aria-labelledby="link-title">
+    <div class="auth-brand">{{ icon("cloud") }}</div>
+    {% if not link %}
+        <h1 id="link-title">{{ _("Link unavailable") }}</h1>
+        <p>
+        {% if state == "expired" %}{{ _("This upload link has expired.") }}
+        {% elif state == "full" %}{{ _("This upload link has reached its file limit.") }}
+        {% else %}{{ _("This link is invalid or has been revoked.") }}{% endif %}
+        </p>
+    {% else %}
+        <h1 id="link-title">{{ _("Upload files") }}</h1>
+        <p class="muted">
+            {{ _("Files you upload here go to %(owner)s, into %(folder)s.", owner=link.owner, folder=(folder or _("My files"))) }}
+            {% if left is not none %} {{ _("Files left: %(n)s", n=left) }}{% endif %}
+        </p>
+        {% if needs_login %}
+            <p class="alert" role="status">{{ _("Only signed-in users can upload with this link.") }}</p>
+            <a class="btn btn-primary btn-block" href="{{ url_for('auth.login', next=url_for('upload_links.public_page', token=link.token)) }}">{{ icon("lock") }}<span>{{ _("Sign in to upload") }}</span></a>
+        {% elif not unlocked %}
+            <form id="unlock-form" class="form" data-endpoint="{{ url_for('upload_links.public_unlock', token=link.token) }}" novalidate>
+                <div class="field">
+                    <label for="share-password">{{ _("This link is protected. Enter the password:") }}</label>
+                    <input id="share-password" type="password" autocomplete="off" required dir="ltr">
+                </div>
+                <button type="submit" class="btn btn-primary btn-block">{{ icon("lock") }}<span>{{ _("Unlock") }}</span></button>
+            </form>
+        {% else %}
+            {% if current_user.is_authenticated %}
+            <p class="hint">{{ _("Signed in as %(name)s: the owner sees your username on each file.", name=current_user.username) }}</p>
+            {% endif %}
+            <div class="dropzone" id="dropzone" data-api="{{ url_for('upload_links.public_start', token=link.token) }}">
+                {{ icon("upload", "icon-xl") }}
+                <p><strong>{{ _("Drag and drop files here") }}</strong></p>
+                <p class="muted">{{ _("or") }}</p>
+                <label class="btn btn-primary" for="file-input">{{ icon("file") }}<span>{{ _("Choose files") }}</span></label>
+                <input type="file" id="file-input" multiple class="sr-only">
+                <p class="hint">{{ _("Large uploads continue where they stopped if the connection drops or you select the same file again.") }}</p>
+            </div>
+            <section aria-labelledby="queue-title" class="queue-section">
+                <h2 id="queue-title">{{ _("Upload queue") }}</h2>
+                <ul id="queue" class="queue" role="list"></ul>
+                <p class="queue-empty" id="queue-empty">{{ _("No uploads yet. Files you add appear here with their progress.") }}</p>
+            </section>
+        {% endif %}
+    {% endif %}
+    <p class="muted share-brand">{{ _("Shared with Simple Cloud") }}</p>
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='share_public.js') }}"></script>
+{% if link and unlocked and not needs_login %}<script src="{{ url_for('static', filename='upload.js') }}"></script>{% endif %}
+{% endblock %}

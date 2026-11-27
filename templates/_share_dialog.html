@@ -2,6 +2,7 @@
     <form method="dialog" id="share-form" novalidate>
         <h2 id="share-dialog-title" class="dialog-title">{{ _("Share") }}</h2>
         <p class="muted share-file" id="share-file" dir="auto"></p>
+        <p class="hint" id="share-folder-hint" hidden>{{ _("Everything in this folder (with its subfolders) can be viewed and downloaded, one by one or as a ZIP. The download limit counts people: each person counts once.") }}</p>
         <div class="field">
             <label for="share-expiry">{{ _("Link expires") }}</label>
             <select id="share-expiry">

@@ -105,6 +105,44 @@
     </form>
 </dialog>
 
+<section class="card" aria-labelledby="activity-title">
+    <h2 id="activity-title">{{ _("Activity log") }}</h2>
+    <form id="activity-form" class="form form-inline activity-filters" novalidate>
+        <div class="field">
+            <label for="act-user">{{ _("User") }}</label>
+            <select id="act-user"><option value="">{{ _("Everyone") }}</option></select>
+        </div>
+        <div class="field">
+            <label for="act-event">{{ _("Action") }}</label>
+            <select id="act-event"><option value="">{{ _("All actions") }}</option></select>
+        </div>
+        <div class="field">
+            <label for="act-from">{{ _("From") }}</label>
+            <input id="act-from" type="date">
+        </div>
+        <div class="field">
+            <label for="act-to">{{ _("To") }}</label>
+            <input id="act-to" type="date">
+        </div>
+        <div class="field">
+            <label for="act-q">{{ _("Search") }}</label>
+            <input id="act-q" type="search" placeholder="{{ _('File name, IP…') }}" dir="auto">
+        </div>
+        <div class="activity-buttons">
+            <button type="submit" class="btn btn-primary">{{ icon("search") }}<span>{{ _("Filter") }}</span></button>
+            <button type="button" class="btn" id="act-reset">{{ _("Reset") }}</button>
+        </div>
+    </form>
+    <div class="table-wrap">
+        <table class="table-cards activity-table">
+            <thead><tr><th scope="col">{{ _("Time") }}</th><th scope="col">{{ _("User") }}</th><th scope="col">{{ _("Action") }}</th>
+                <th scope="col">{{ _("Details") }}</th><th scope="col">{{ _("IP") }}</th></tr></thead>
+            <tbody id="activity-body"><tr><td colspan="5" class="muted">{{ _("Loading…") }}</td></tr></tbody>
+        </table>
+    </div>
+    <button type="button" class="btn" id="act-more" hidden>{{ _("Load more") }}</button>
+</section>
+
 <section id="system" class="system" aria-labelledby="system-title" aria-busy="true">
     <div class="page-head">
         <h2 id="system-title">{{ _("System and storage") }}</h2>
@@ -194,4 +232,5 @@
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='admin.js') }}"></script>
+<script src="{{ url_for('static', filename='activity.js') }}"></script>
 {% endblock %}

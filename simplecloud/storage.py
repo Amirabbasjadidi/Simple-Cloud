@@ -55,7 +55,7 @@ def unique_name(db, user_id, name, folder_id=None):
     """'a.txt' -> 'a (1).txt' if this folder already has a file with that name."""
     base, ext = os.path.splitext(name)
     candidate, n = name, 1
-    while db.execute("SELECT 1 FROM files WHERE user_id = ? AND folder_id IS ? AND name = ?",
+    while db.execute("SELECT 1 FROM files WHERE user_id = ? AND folder_id IS ? AND name = ? AND deleted_at IS NULL",
                      (user_id, folder_id, candidate)).fetchone():
         candidate = f"{base} ({n}){ext}"
         n += 1

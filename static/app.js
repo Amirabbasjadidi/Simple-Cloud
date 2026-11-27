@@ -37,7 +37,8 @@ const SC = (() => {
     return data;
   }
 
-  function toast(message, type = "info", timeout = 5000) {
+  /* action: { label, onClick } adds a button (e.g. Undo) that runs once and closes the toast. */
+  function toast(message, type = "info", timeout = 5000, action = null) {
     const box = document.getElementById("toasts");
     const node = document.createElement("div");
     node.className = `toast toast-${type}`;
@@ -45,7 +46,9 @@ const SC = (() => {
     const text = document.createElement("span");
     text.textContent = message;
     const close = el("button", { type: "button", class: "toast-close", "aria-label": t("Dismiss"), onclick: () => node.remove() }, icon("x"));
-    node.append(icon(type === "error" ? "alert" : type === "success" ? "check" : "info"), text, close);
+    const act = action ? el("button", { type: "button", class: "toast-action", text: action.label,
+      onclick: () => { node.remove(); action.onClick(); } }) : null;
+    node.append(...[icon(type === "error" ? "alert" : type === "success" ? "check" : "info"), text, act, close].filter(Boolean));
     box.appendChild(node);
     if (timeout) setTimeout(() => node.remove(), timeout);
   }
@@ -233,19 +236,23 @@ const SC = (() => {
   const PDFJS = SPRITE.replace(/icons\.svg$/, "vendor/pdfjs/");
   let pdfjs = null;
   let pdfDoc = null;  // one PDF preview open at a time
+  /* The PDF behind src (a preview URL) as a pdf.js document; the caller destroys it. */
+  async function openPdf(src) {
+    pdfjs ||= await import(`${PDFJS}pdf.min.mjs`);
+    pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.mjs`;
+    const r = await fetch(`${src}${src.includes("?") ? "&" : "?"}raw=1`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    return pdfjs.getDocument({
+      data: new Uint8Array(await r.arrayBuffer()), isEvalSupported: false,
+      cMapUrl: `${PDFJS}cmaps/`, cMapPacked: true, standardFontDataUrl: `${PDFJS}standard_fonts/`,
+    }).promise;
+  }
   async function pdfFrame(box, src, title) {
     box.replaceChildren(el("div", { class: "pdf-loading", role: "status" },
       el("div", { class: "progress progress-indeterminate" }, el("span")), el("p", { class: "muted", text: t("Loading…") })));
     try {
-      pdfjs ||= await import(`${PDFJS}pdf.min.mjs`);
-      pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.mjs`;
-      const r = await fetch(`${src}${src.includes("?") ? "&" : "?"}raw=1`);
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
       pdfDoc?.destroy();
-      pdfDoc = await pdfjs.getDocument({
-        data: new Uint8Array(await r.arrayBuffer()), isEvalSupported: false,
-        cMapUrl: `${PDFJS}cmaps/`, cMapPacked: true, standardFontDataUrl: `${PDFJS}standard_fonts/`,
-      }).promise;
+      pdfDoc = await openPdf(src);
       const doc = pdfDoc;
       // dir=ltr: canvas text inherits the page direction, and pdf.js places glyphs one by one
       // assuming LTR. In our RTL page, text in embedded fonts (e.g. Chrome's Save as PDF) came out garbled.
@@ -282,5 +289,5 @@ const SC = (() => {
     }
   }
 
-  return { api, toast, confirm: confirmDialog, prompt: promptDialog, openDialog, formatBytes, formatDate, el, icon, t, num, lang, csrf, refreshUsage, pdfFrame };
+  return { api, toast, confirm: confirmDialog, prompt: promptDialog, openDialog, formatBytes, formatDate, el, icon, t, num, lang, csrf, refreshUsage, pdfFrame, openPdf };
 })();

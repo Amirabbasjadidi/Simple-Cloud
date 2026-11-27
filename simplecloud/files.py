@@ -1,4 +1,5 @@
 import os
+import time
 
 from flask import Blueprint, abort, jsonify, redirect, render_template, request, send_file, url_for
 from flask_login import current_user, login_required
@@ -35,7 +36,7 @@ def _api_error(e):
 # ---------------------------------------------------------------- helpers
 
 def _owned_file_or_404(file_id):
-    row = get_db().execute("SELECT * FROM files WHERE id = ? AND user_id = ?",
+    row = get_db().execute("SELECT * FROM files WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
                            (file_id, current_user.id)).fetchone()
     if row is None:
         abort(404)
@@ -54,6 +55,56 @@ def owned_folder(db, user_id, folder_id):
     if row is None:
         raise ApiError("Folder not found.", 404)
     return row
+
+
+def folder_path(db, folder_id):
+    """'A / B / C' for a folder id (None -> '')."""
+    folder = db.execute("SELECT * FROM folders WHERE id = ?", (folder_id,)).fetchone() if folder_id else None
+    return " / ".join(c["name"] for c in _breadcrumbs(db, folder))
+
+
+def subfolder_ids(db, folder_id):
+    """folder_id and every folder below it."""
+    return [r[0] for r in db.execute(
+        "WITH RECURSIVE sub(id) AS (SELECT id FROM folders WHERE id = ? "
+        "UNION ALL SELECT f.id FROM folders f JOIN sub ON f.parent_id = sub.id) SELECT id FROM sub", (folder_id,))]
+
+
+def thumb_path(stored_name):
+    return storage.abs_path(stored_name + ".thumb")
+
+
+def destroy_files(db, rows):
+    """Permanently delete file rows (after trash). Disk files go only after the commit, so a
+    crash leaves unreferenced files, never rows without files."""
+    if not rows:
+        return
+    db.execute(f"DELETE FROM files WHERE id IN ({','.join('?' * len(rows))})", [r["id"] for r in rows])
+    db.commit()
+    for r in rows:
+        storage.remove_quietly(storage.abs_path(r["stored_name"]))
+        storage.remove_quietly(thumb_path(r["stored_name"]))
+
+
+def trash_files(db, user_id, rows, now=None):
+    """Move live file rows to the trash (caller commits). They keep counting toward the quota."""
+    now = now or time.time()
+    for r in rows:
+        db.execute("UPDATE files SET deleted_at = ?, trash_folder_id = ?, trash_path = ?, folder_id = NULL "
+                   "WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+                   (now, r["folder_id"], folder_path(db, r["folder_id"]), r["id"], user_id))
+
+
+def trash_folder(db, user_id, folder_id):
+    """Trash every live file below a folder and delete the folders. Returns (files, folders)."""
+    ids = subfolder_ids(db, folder_id)
+    marks = ",".join("?" * len(ids))
+    rows = db.execute(f"SELECT * FROM files WHERE user_id = ? AND deleted_at IS NULL AND folder_id IN ({marks})",
+                      (user_id, *ids)).fetchall()
+    trash_files(db, user_id, rows)
+    # Deepest folders first is not needed: one statement deletes them all.
+    db.execute(f"DELETE FROM folders WHERE id IN ({marks})", ids)
+    return len(rows), len(ids)
 
 
 def _breadcrumbs(db, folder):
@@ -120,12 +171,24 @@ def _send(row, inline):
     return resp
 
 
+def thumb_state(r):
+    """ready | none (tried, nothing to show) | missing (not made yet) | None (kind has no thumbnail)."""
+    if preview_kind(r["mime_type"]) not in ("pdf", "video", "audio"):
+        return None
+    try:
+        return "ready" if os.path.getsize(thumb_path(r["stored_name"])) else "none"
+    except OSError:
+        return "missing"
+
+
 def file_json(r):
     return {
         "id": r["id"], "name": r["name"], "size": r["size"], "mime_type": r["mime_type"],
         "created_at": r["created_at"], "folder_id": r["folder_id"], "preview_kind": preview_kind(r["mime_type"]),
         "download_url": url_for("files.download", file_id=r["id"]),
         "preview_url": url_for("files.preview", file_id=r["id"]),
+        "thumb": thumb_state(r), "thumb_url": url_for("thumbs.thumb", file_id=r["id"]),
+        "uploaded_by": r["uploaded_by"], "via_link": r["upload_link_id"] is not None,
     }
 
 
@@ -133,7 +196,7 @@ def folder_json(r):
     return {"id": r["id"], "name": r["name"], "parent_id": r["parent_id"], "created_at": r["created_at"]}
 
 
-def add_file(db, user_id, name, write, folder_id=None, exclude_upload=None):
+def add_file(db, user_id, name, write, folder_id=None, exclude_upload=None, link_id=None, uploaded_by=None):
     """Store a new file for user_id. Usable outside a request (background jobs pass their own db).
 
     `write(path)` puts the bytes at path; `name` may be a callable evaluated after writing (fetch
@@ -154,8 +217,9 @@ def add_file(db, user_id, name, write, folder_id=None, exclude_upload=None):
         name = storage.clean_name(name() if callable(name) else name)
         name = storage.unique_name(db, user_id, name, folder_id)
         cur = db.execute(
-            "INSERT INTO files (user_id, folder_id, name, stored_name, size, mime_type) VALUES (?, ?, ?, ?, ?, ?)",
-            (user_id, folder_id, name, stored, size, storage.guess_mime(name)))
+            "INSERT INTO files (user_id, folder_id, name, stored_name, size, mime_type, upload_link_id, uploaded_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, folder_id, name, stored, size, storage.guess_mime(name), link_id, uploaded_by))
         db.commit()
     except BaseException:
         if db.in_transaction:
@@ -235,7 +299,7 @@ def api_files():
         like = "%" + q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
         folders = db.execute(f"SELECT * FROM folders WHERE user_id = ? AND name LIKE ? ESCAPE '\\' "
                              f"ORDER BY {folder_order}", (uid, like)).fetchall()
-        files = db.execute(f"SELECT * FROM files WHERE user_id = ? AND name LIKE ? ESCAPE '\\' "
+        files = db.execute(f"SELECT * FROM files WHERE user_id = ? AND deleted_at IS NULL AND name LIKE ? ESCAPE '\\' "
                            f"ORDER BY {column} {direction}, id {direction}", (uid, like)).fetchall()
         folder, crumbs = None, []
     else:
@@ -243,7 +307,7 @@ def api_files():
         fid = folder["id"] if folder else None
         folders = db.execute(f"SELECT * FROM folders WHERE user_id = ? AND parent_id IS ? ORDER BY {folder_order}",
                              (uid, fid)).fetchall()
-        files = db.execute(f"SELECT * FROM files WHERE user_id = ? AND folder_id IS ? "
+        files = db.execute(f"SELECT * FROM files WHERE user_id = ? AND folder_id IS ? AND deleted_at IS NULL "
                            f"ORDER BY {column} {direction}, id {direction}", (uid, fid)).fetchall()
         crumbs = _breadcrumbs(db, folder)
     return jsonify(folder=folder_json(folder) if folder else None, breadcrumbs=crumbs, search=bool(q),
@@ -302,21 +366,45 @@ def update_folder(folder_id):
 @bp.route("/api/folders/<int:folder_id>", methods=["DELETE"])
 @login_required
 def delete_folder(folder_id):
-    """Delete a folder with everything in it."""
+    """Move the folder's files to the trash and delete the folder with its subfolders."""
     db = get_db()
-    owned_folder(db, current_user.id, folder_id)
-    ids = [r[0] for r in db.execute(
-        "WITH RECURSIVE sub(id) AS (SELECT id FROM folders WHERE id = ? "
-        "UNION ALL SELECT f.id FROM folders f JOIN sub ON f.parent_id = sub.id) SELECT id FROM sub", (folder_id,))]
-    marks = ",".join("?" * len(ids))
-    stored = [r[0] for r in db.execute(f"SELECT stored_name FROM files WHERE folder_id IN ({marks})", ids)]
-    db.execute(f"DELETE FROM files WHERE folder_id IN ({marks})", ids)
-    db.execute(f"DELETE FROM folders WHERE id IN ({marks})", ids)
+    folder = owned_folder(db, current_user.id, folder_id)
+    files, folders = trash_folder(db, current_user.id, folder_id)
     db.commit()
-    for name in stored:  # after commit: never a row without its file
-        storage.remove_quietly(storage.abs_path(name))
-    log_event("folder_delete", user=current_user.username, folder_id=folder_id, folders=len(ids), files=len(stored))
-    return jsonify(success=True, deleted_files=len(stored), deleted_folders=len(ids))
+    log_event("folder_delete", user=current_user.username, folder_id=folder_id, name=folder["name"],
+              folders=folders, files=files)
+    return jsonify(success=True, deleted_files=files, deleted_folders=folders)
+
+
+@bp.route("/api/items/delete", methods=["POST"])
+@login_required
+def delete_items():
+    """Several files and folders to the trash: {"files": [ids], "folders": [ids]}."""
+    db = get_db()
+    data = request.get_json(silent=True) or {}
+    file_ids, folder_ids = _id_list(data.get("files")), _id_list(data.get("folders"))
+    rows = [_owned_file_or_404(i) for i in file_ids]
+    for i in folder_ids:
+        owned_folder(db, current_user.id, i)
+    trash_files(db, current_user.id, rows)
+    n_files = len(rows)
+    for i in folder_ids:
+        if db.execute("SELECT 1 FROM folders WHERE id = ?", (i,)).fetchone():  # not inside one deleted above
+            n_files += trash_folder(db, current_user.id, i)[0]
+    db.commit()
+    log_event("items_delete", user=current_user.username, files=n_files, folders=len(folder_ids))
+    return jsonify(success=True, deleted_files=n_files)
+
+
+def _id_list(value, limit=1000):
+    if value is None:
+        return []
+    if not isinstance(value, list) or len(value) > limit:
+        raise ApiError("Invalid selection.")
+    try:
+        return list(dict.fromkeys(int(v) for v in value))
+    except (TypeError, ValueError):
+        raise ApiError("Invalid selection.")
 
 
 # ---------------------------------------------------------------- single file
@@ -335,8 +423,8 @@ def update_file(file_id):
     name = storage.clean_name(data.get("name", row["name"]), default="")
     if not name:
         raise ApiError("File name must not be empty.")
-    if db.execute("SELECT 1 FROM files WHERE user_id = ? AND folder_id IS ? AND name = ? AND id != ?",
-                  (current_user.id, folder_id, name, file_id)).fetchone():
+    if db.execute("SELECT 1 FROM files WHERE user_id = ? AND folder_id IS ? AND name = ? AND id != ? "
+                  "AND deleted_at IS NULL", (current_user.id, folder_id, name, file_id)).fetchone():
         raise ApiError("A file with this name already exists there.", 409)
     db.execute("UPDATE files SET name = ?, folder_id = ?, mime_type = ? WHERE id = ?",
                (name, folder_id, storage.guess_mime(name), file_id))
@@ -348,13 +436,13 @@ def update_file(file_id):
 @bp.route("/api/files/<int:file_id>", methods=["DELETE"])
 @login_required
 def delete_file(file_id):
-    row = get_db().execute("SELECT * FROM files WHERE id = ? AND user_id = ?", (file_id, current_user.id)).fetchone()
+    db = get_db()
+    row = db.execute("SELECT * FROM files WHERE id = ? AND user_id = ? AND deleted_at IS NULL",
+                     (file_id, current_user.id)).fetchone()
     if row is None:
         return jsonify(success=False, error="File not found."), 404
-    db = get_db()
-    db.execute("DELETE FROM files WHERE id = ?", (file_id,))
+    trash_files(db, current_user.id, [row])
     db.commit()
-    storage.remove_quietly(storage.abs_path(row["stored_name"]))  # after commit: never a row without its file
     log_event("delete", user=current_user.username, file_id=file_id, name=row["name"])
     return jsonify(success=True)
 

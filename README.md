@@ -6,17 +6,24 @@ and English**.
 
 ## Features
 - **Files:** folders, search across all folders, sort, grid and list views, preview of images,
-  video, audio, PDF and text, rename, move, delete.
-- **Upload:** drag and drop, many files at once, chunked and resumable (a dropped connection or
-  re-selecting the same file continues where it stopped).
+  video, audio, PDF and text, thumbnails for PDF, video and music covers, rename, move, select
+  several items to download as one ZIP or delete.
+- **Trash:** deleted files wait 30 days (`TRASH_DAYS`) before they are removed, and can be restored.
+  They keep counting toward the quota until they leave the trash.
+- **Upload:** drag and drop, many files at once, into a folder you choose, chunked and resumable
+  (a dropped connection or re-selecting the same file continues where it stopped).
+- **Upload links:** others upload into one of your folders, with optional expiry, password, file
+  limit and required sign-in (then each file shows who uploaded it).
 - **Fetch from URL:** the server downloads files in the background with progress; private and
   internal addresses are refused (SSRF protection, with correct TLS checks for HTTPS sources).
-- **Share links:** optional expiry, password and download limit; revocable.
+- **Share links** for files and folders: optional expiry, password, download limit and required
+  sign-in; online viewing that counts as a download; a folder can be downloaded as a ZIP; revocable.
 - **Accounts:** per-user storage quota, optional two-factor sign-in (TOTP authenticator apps),
   change-password page, an admin panel for users, and a command-line tool.
 - **Admin dashboard:** disk usage (cloud files, other data, free), storage per user, a warning when
   the quotas add up to more than the disk can hold or a user is unlimited, the largest files,
-  database backups with a "Back up now" button.
+  database backups with a "Back up now" button, an activity log filterable by user, action,
+  dates and text.
 - **Security:** every user sees only their own files; math captcha and login lockout shared by all
   workers; CSRF protection; strict Content-Security-Policy; uploads stored under random names.
 - **Interface:** mobile-first, light and dark mode, keyboard and screen-reader friendly (WCAG AA
@@ -60,6 +67,8 @@ variables override them. The most useful ones:
 | `BACKUP_KEEP` | 14 | Database backups kept (installer: `--backup-keep`). |
 | `BACKUP_MAX_AGE_HOURS`, `LOW_DISK_PERCENT` | 26, 10 | Dashboard warnings: newest database backup older than this; less free disk than this. |
 | `STATS_CACHE_SECONDS` | 60 | How long the dashboard's storage figures are cached. |
+| `TRASH_DAYS` | 30 | Days a deleted file stays in the trash before it is removed for good. |
+| `EVENTS_KEEP_DAYS` | 180 | Days the admin activity log keeps an event. |
 | `SHARE_GRANT_SECONDS` | 43200 (12 h) | After a share-link download is counted, that browser or download manager may resume, retry and fetch in parallel segments for this long without using up the download limit. |
 | `LOGIN_MAX_FAILURES_USER` / `_IP`, `LOGIN_LOCKOUT_SECONDS` | 5 / 20, 900 | Login lockout. |
 | `COOKIE_SECURE` | 0 | Keep 0 on plain HTTP. Set 1 only if the site is served over HTTPS. |

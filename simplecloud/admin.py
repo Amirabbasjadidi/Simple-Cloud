@@ -1,4 +1,5 @@
 import functools
+import json
 import secrets
 
 from flask import Blueprint, abort, current_app, jsonify, render_template, request
@@ -217,6 +218,50 @@ def update_settings():
     db.commit()
     log_event("admin_update_settings", admin=current_user.username, changes=",".join(sorted(data)))
     return jsonify(success=True)
+
+
+# ---------------------------------------------------------------- activity log
+
+EVENTS_PAGE = 100
+
+
+@bp.route("/api/admin/events")
+@admin_api
+def list_events():
+    """?user= ?event= ?q=<text in details or IP> ?from=<unix ts> ?to=<unix ts> ?before=<id: next page>"""
+    db = get_db()
+    where, params = [], []
+    args = request.args
+    if args.get("user"):
+        where.append("username = ?")
+        params.append(args["user"])
+    if args.get("event"):
+        where.append("event = ?")
+        params.append(args["event"])
+    if args.get("q"):
+        like = "%" + args["q"].replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+        where.append("(details LIKE ? ESCAPE '\\' OR ip LIKE ? ESCAPE '\\' OR username LIKE ? ESCAPE '\\')")
+        params += [like, like, like]
+    for key, op in (("from", ">="), ("to", "<"), ("before", None)):
+        if args.get(key):
+            try:
+                value = float(args[key])
+            except ValueError:
+                return jsonify(success=False, error="Invalid filter."), 400
+            where.append(f"ts {op} ?" if op else "id < ?")
+            params.append(value)
+    sql = "SELECT * FROM events" + (" WHERE " + " AND ".join(where) if where else "")
+    rows = db.execute(sql + " ORDER BY id DESC LIMIT ?", (*params, EVENTS_PAGE + 1)).fetchall()
+    more = len(rows) > EVENTS_PAGE
+    rows = rows[:EVENTS_PAGE]
+    result = {"events": [{"id": r["id"], "ts": r["ts"], "event": r["event"], "user": r["username"], "ip": r["ip"],
+                          "details": json.loads(r["details"]) if r["details"] else {}} for r in rows],
+              "next": rows[-1]["id"] if more else None}
+    if not args.get("before"):  # filter choices, with the first page only
+        result["event_types"] = [r[0] for r in db.execute("SELECT DISTINCT event FROM events ORDER BY event")]
+        result["users"] = [r[0] for r in db.execute("SELECT DISTINCT username FROM events WHERE username IS NOT NULL "
+                                                    "ORDER BY username COLLATE NOCASE")]
+    return jsonify(result)
 
 
 # ---------------------------------------------------------------- system / storage dashboard

@@ -359,6 +359,11 @@ legend { font-weight: 600; font-size: var(--text-sm); padding-inline: var(--spac
   background: transparent; border: 0; border-radius: var(--radius-sm); color: inherit; cursor: pointer;
 }
 .toast-close:hover { background: rgb(127 127 127 / .2); }
+.toast-action {
+  flex: none; min-block-size: 36px; padding: 0 var(--space-3); border: 1px solid currentColor; border-radius: var(--radius-sm);
+  background: transparent; color: inherit; font: inherit; font-weight: 600; cursor: pointer;
+}
+.toast-action:hover { background: rgb(127 127 127 / .2); }
 @keyframes toast-in { from { opacity: 0; translate: 0 8px; } }
 
 /* ---------- dialogs ---------- */
@@ -462,6 +467,28 @@ legend { font-weight: 600; font-size: var(--text-sm); padding-inline: var(--spac
 .view-list .item-text { display: grid; min-inline-size: 0; }
 .view-list .item-actions { padding: 0 var(--space-2); }
 .item-text { display: grid; min-inline-size: 0; gap: 2px; }
+.thumb img.thumb-cover { object-fit: contain; background: #000; }
+
+/* Selection: the checkbox shows on hover/focus and stays visible once anything is selected
+   (and always on touch screens, which have no hover). */
+.item-check {
+  position: absolute; inset-block-start: var(--space-2); inset-inline-start: var(--space-2); z-index: 1;
+  inline-size: 22px; block-size: 22px; margin: 0; accent-color: var(--primary); cursor: pointer;
+  opacity: 0; transition: opacity var(--ease);
+}
+.item:hover .item-check, .item-check:focus-visible, .selecting .item-check, .item-check:checked { opacity: 1; }
+@media (pointer: coarse) { .item-check { opacity: 1; inline-size: 28px; block-size: 28px; } }
+.item.is-selected { border-color: var(--primary); background: var(--primary-soft); }
+.view-list .item-check { position: static; flex: none; margin-inline-start: var(--space-3); }
+.view-list .item.is-selected { background: var(--primary-soft); }
+.selection-bar {
+  position: sticky; inset-block-end: var(--space-3); z-index: 5; margin-block-start: var(--space-4);
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  padding: var(--space-2) var(--space-3); border-radius: var(--radius-lg);
+  background: var(--surface); border: 1px solid var(--border-strong); box-shadow: var(--overlay-shadow);
+}
+.selection-bar .spacer { flex: 1; }
+.selection-bar[hidden] { display: none; }
 
 /* Overflow menu built on <details>: works without JS, closes on outside click (app.js). */
 .menu { position: relative; }
@@ -591,6 +618,19 @@ details > summary { cursor: pointer; color: var(--primary); }
 .share-actions { display: grid; gap: var(--space-2); }
 .share-actions .hint { margin: 0; text-align: center; }
 .share-viewer { margin-block-start: var(--space-4); }
+.share-files { list-style: none; margin: var(--space-4) 0 0; padding: 0; border: 1px solid var(--border); border-radius: var(--radius); }
+.share-file-row { display: flex; align-items: center; gap: var(--space-2); padding: var(--space-2) var(--space-3); }
+.share-file-row + .share-file-row { border-block-start: 1px solid var(--border); }
+.share-file-text { display: grid; flex: 1; min-inline-size: 0; }
+.share-file-name { font-weight: 600; font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-file-meta { font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.share-viewer-title { margin: var(--space-5) 0 0; font-size: var(--text-md); overflow-wrap: anywhere; scroll-margin-block-start: var(--space-4); }
+.activity-buttons { display: flex; gap: var(--space-2); align-items: end; }
+.activity-details { max-inline-size: 28rem; overflow-wrap: anywhere; font-size: var(--text-sm); }
+.activity-table time { white-space: nowrap; font-size: var(--text-sm); }
+#act-more { margin-block-start: var(--space-3); }
+.trash-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); flex-wrap: wrap; }
+.auth-card:has(.share-files), .upload-link-card:has(.dropzone) { inline-size: min(720px, 100%); }
 .share-brand { margin-block-start: var(--space-5); text-align: center; font-size: var(--text-sm); }
 
 /* ---------- motion ---------- */

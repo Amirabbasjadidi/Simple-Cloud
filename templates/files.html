@@ -26,6 +26,7 @@
     </div>
     <span class="spacer"></span>
     <button type="button" class="btn" id="new-folder">{{ icon("folder-plus") }}<span>{{ _("New folder") }}</span></button>
+    <button type="button" class="btn" id="folder-upload-link" title="{{ _('Let others upload files into this folder') }}">{{ icon("link") }}<span>{{ _("Upload link") }}</span></button>
     <a class="btn btn-primary" id="upload-here" href="{{ url_for('files.upload_page') }}">{{ icon("upload") }}<span>{{ _("Upload") }}</span></a>
 </div>
 
@@ -36,7 +37,16 @@
     <p class="sr-only">{{ _("Loading…") }}</p>
 </section>
 
+<div id="selection-bar" class="selection-bar" role="region" aria-label="{{ _('Selected items') }}" hidden>
+    <span id="selection-count" aria-live="polite"></span>
+    <span class="spacer"></span>
+    <button type="button" class="btn" id="sel-download">{{ icon("download") }}<span>{{ _("Download") }}</span></button>
+    <button type="button" class="btn btn-danger-ghost" id="sel-delete">{{ icon("trash") }}<span>{{ _("Delete") }}</span></button>
+    <button type="button" class="btn btn-icon btn-ghost" id="sel-clear" aria-label="{{ _('Clear selection') }}" title="{{ _('Clear selection') }}">{{ icon("x") }}</button>
+</div>
+
 {% include "_share_dialog.html" %}
+{% include "_upload_link_dialog.html" %}
 
 <dialog id="preview-dialog" class="dialog dialog-preview" aria-labelledby="preview-title">
     <form method="dialog">
@@ -52,5 +62,6 @@
 {% block scripts %}
 <script src="{{ url_for('static', filename='preview.js') }}"></script>
 <script src="{{ url_for('static', filename='shares.js') }}"></script>
+<script src="{{ url_for('static', filename='thumbs.js') }}"></script>
 <script src="{{ url_for('static', filename='files.js') }}"></script>
 {% endblock %}
