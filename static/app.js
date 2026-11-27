@@ -226,20 +226,57 @@ const SC = (() => {
     });
   });
 
-  /* PDF preview from a blob: URL. Download managers (e.g. IDM's browser extension) grab a PDF
-     loaded straight into a frame and leave it blank; a fetch() into memory is left alone. */
-  let pdfUrl = null;
+  /* PDF preview drawn with pdf.js (static/vendor/pdfjs) on canvases: the browser's own viewer is
+     missing on Android and is hijacked by download managers (IDM) on desktop. `?raw=1` makes the
+     server send the bytes as text/plain without a filename, which download managers ignore.
+     Pages are drawn when scrolled near, so long documents stay light. */
+  const PDFJS = SPRITE.replace(/icons\.svg$/, "vendor/pdfjs/");
+  let pdfjs = null;
+  let pdfDoc = null;  // one PDF preview open at a time
   async function pdfFrame(box, src, title) {
-    box.replaceChildren(el("p", { class: "muted", text: t("Loading…") }));
+    box.replaceChildren(el("div", { class: "pdf-loading", role: "status" },
+      el("div", { class: "progress progress-indeterminate" }, el("span")), el("p", { class: "muted", text: t("Loading…") })));
     try {
-      const r = await fetch(src);
+      pdfjs ||= await import(`${PDFJS}pdf.min.mjs`);
+      pdfjs.GlobalWorkerOptions.workerSrc = `${PDFJS}pdf.worker.min.mjs`;
+      const r = await fetch(`${src}${src.includes("?") ? "&" : "?"}raw=1`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const blob = new Blob([await r.blob()], { type: "application/pdf" });
-      if (pdfUrl) URL.revokeObjectURL(pdfUrl);  // one PDF preview open at a time
-      pdfUrl = URL.createObjectURL(blob);
-      box.replaceChildren(el("iframe", { src: pdfUrl, title }));
+      pdfDoc?.destroy();
+      pdfDoc = await pdfjs.getDocument({
+        data: new Uint8Array(await r.arrayBuffer()), isEvalSupported: false,
+        cMapUrl: `${PDFJS}cmaps/`, cMapPacked: true, standardFontDataUrl: `${PDFJS}standard_fonts/`,
+      }).promise;
+      const doc = pdfDoc;
+      const pages = el("div", { class: "pdf-pages", role: "region", tabindex: "0", "aria-label": title });
+      box.replaceChildren(pages);
+      const first = (await doc.getPage(1)).getViewport({ scale: 1 });
+      const scale = Math.min(2, (pages.clientWidth - 24) / first.width);
+      const draw = async (canvas) => {
+        const page = await doc.getPage(Number(canvas.dataset.page));
+        const vp = page.getViewport({ scale });
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(vp.width * dpr);
+        canvas.height = Math.floor(vp.height * dpr);
+        await page.render({ canvasContext: canvas.getContext("2d"), viewport: vp,
+          transform: dpr === 1 ? null : [dpr, 0, 0, dpr, 0, 0] }).promise;
+      };
+      const io = new IntersectionObserver((entries) => {
+        for (const e of entries) {
+          if (!e.isIntersecting) continue;
+          io.unobserve(e.target);
+          draw(e.target).catch(() => e.target.classList.add("pdf-page-error"));
+        }
+      }, { root: pages, rootMargin: "100% 0px" });
+      for (let n = 1; n <= doc.numPages; n++) {
+        // Blank canvas at page 1's size until drawn: keeps the scrollbar stable.
+        const canvas = el("canvas", { class: "pdf-page", width: Math.floor(first.width * scale),
+          height: Math.floor(first.height * scale), "data-page": n, role: "img",
+          "aria-label": t("Page {n} of {total}", { n: num(n), total: num(doc.numPages) }) });
+        pages.append(canvas);
+        io.observe(canvas);
+      }
     } catch (e) {
-      box.replaceChildren(el("p", { class: "error", role: "alert", text: `${t("Preview failed")}: ${e.message}` }));
+      box.replaceChildren(el("p", { class: "error", role: "alert", text: `${t("Preview failed")}: ${e.message || e}` }));
     }
   }
 

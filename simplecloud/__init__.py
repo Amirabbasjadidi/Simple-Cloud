@@ -1,4 +1,5 @@
 import logging
+import mimetypes
 import os
 
 from flask import Flask, jsonify
@@ -9,11 +10,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .config import ROOT, load_config
 
+mimetypes.add_type("text/javascript", ".mjs")  # pdf.js modules; some systems map .mjs to nothing
 csrf = CSRFProtect()
 limiter = Limiter(key_func=get_remote_address)
 
-# frame-src blob:: PDF previews are fetched into memory and shown from a blob: URL.
-CSP = ("default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; frame-src 'self' blob:; "
+CSP = ("default-src 'self'; img-src 'self' data: blob:; media-src 'self' blob:; "
        "object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'")
 
 

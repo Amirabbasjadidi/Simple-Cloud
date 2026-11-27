@@ -382,6 +382,15 @@ legend { font-weight: 600; font-size: var(--text-sm); padding-inline: var(--spac
 .preview-body { display: grid; place-items: center; min-block-size: 120px; }
 .preview-body img, .preview-body video { max-inline-size: 100%; max-block-size: 75vh; border-radius: var(--radius); }
 .preview-body audio { inline-size: 100%; }
+.pdf-loading { display: grid; justify-items: center; gap: var(--space-2); inline-size: min(320px, 100%); }
+.pdf-loading .progress { inline-size: 100%; }
+.pdf-pages {
+  inline-size: 100%; block-size: 75vh; overflow: auto; display: grid; justify-items: center; align-content: start;
+  gap: var(--space-3); padding: var(--space-3); background: var(--surface-2); border-radius: var(--radius);
+}
+.pdf-pages:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.pdf-page { display: block; max-inline-size: 100%; block-size: auto; background: #fff; box-shadow: 0 1px 3px rgb(0 0 0 / .25); }
+.pdf-page-error { outline: 2px dashed var(--danger, #dc2626); }
 .preview-body iframe { inline-size: 100%; block-size: 75vh; border: 0; background: #fff; border-radius: var(--radius); }
 .preview-text {
   inline-size: 100%; max-block-size: 70vh; overflow: auto; margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
